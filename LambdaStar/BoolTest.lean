@@ -19,7 +19,7 @@ private def boolCore (boolean : NamedTerm) : NamedTerm :=
          .app (.app .star (.app (.var "P") falseValue)) (.var "f")]))))
 
 /--
-The explicitly expanded body proposed in `Bool.md`:
+The explicitly expanded body:
 
 `Bool b P t f = * (P b) (b (λa. * (P a)) (* (P true) t) (* (P false) f))`.
 -/
@@ -172,7 +172,7 @@ theorem no_short_assumed_idempotence_path :
 
 end Exploration
 
-/-- The pointwise idempotence question posed in `Bool.md`. -/
+/-- The pointwise idempotence question. -/
 def BoolIsPointwiseIdempotent : Prop :=
   Reduces environment boolBoolVariable boolVariable
 
