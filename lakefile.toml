@@ -1,0 +1,10 @@
+name = "LambdaStar"
+version = "0.1.0"
+defaultTargets = ["lambdastar"]
+
+[[lean_lib]]
+name = "LambdaStar"
+
+[[lean_exe]]
+name = "lambdastar"
+root = "Main"
