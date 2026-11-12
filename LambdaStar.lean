@@ -4,5 +4,8 @@ import LambdaStar.Basic
 import LambdaStar.Syntax
 import LambdaStar.Reduction
 import LambdaStar.Confluence
-import LambdaStar.NatTest
+import LambdaStar.NamedSyntax
+import LambdaStar.SelfTyping
+import LambdaStar.Recursive
 import LambdaStar.BoolTest
+import LambdaStar.NatTest

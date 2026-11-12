@@ -1,1 +1,1 @@
-def hello := "world"
+def projectDescription := "recursive lambda-star metatheory"

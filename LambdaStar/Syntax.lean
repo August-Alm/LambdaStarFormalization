@@ -2,7 +2,7 @@ import Lean.Elab.Tactic.Omega
 
 namespace LambdaStar
 
-/-- Names of constants supplied by the global definition environment. -/
+/-- Names referenced through a recursive definition environment. -/
 abbrev Const := String
 
 /-- Lambda-star terms, using de Bruijn indices for bound variables. -/
@@ -10,7 +10,7 @@ inductive Term where
   | bvar : Nat → Term
   | const : Const → Term
   | lam : Term → Term
-  | mu : Term → Term
+  | iota : Term → Term
   | app : Term → Term → Term
   | star : Term
   deriving DecidableEq, Repr
@@ -23,10 +23,15 @@ def shift (amount cutoff : Nat) : Term → Term
       if cutoff ≤ index then bvar (index + amount) else bvar index
   | const name => const name
   | lam body => lam (shift amount (cutoff + 1) body)
-  | mu body => mu (shift amount (cutoff + 1) body)
+  | iota body => iota (shift amount (cutoff + 1) body)
   | app function argument =>
       app (shift amount cutoff function) (shift amount cutoff argument)
   | star => star
+
+/-- `[A → B] = λf. λx. B (f (A x))`. -/
+def arrow (domain codomain : Term) : Term :=
+  .lam (.lam (.app (codomain.shift 2 0)
+    (.app (.bvar 1) (.app (domain.shift 2 0) (.bvar 0)))))
 
 /-- Shifting every eligible variable by zero leaves a term unchanged. -/
 @[simp] theorem shift_zero (term : Term) (cutoff : Nat) :
@@ -35,7 +40,7 @@ def shift (amount cutoff : Nat) : Term → Term
   | bvar index => simp [shift]
   | const name => rfl
   | lam body inductionHypothesis => simp [shift, inductionHypothesis]
-  | mu body inductionHypothesis => simp [shift, inductionHypothesis]
+  | iota body inductionHypothesis => simp [shift, inductionHypothesis]
   | app function argument functionHypothesis argumentHypothesis =>
       simp [shift, functionHypothesis, argumentHypothesis]
   | star => rfl
@@ -56,7 +61,7 @@ def substAt (depth : Nat) (replacement : Term) : Term → Term
         bvar index
   | const name => const name
   | lam body => lam (substAt (depth + 1) replacement body)
-  | mu body => mu (substAt (depth + 1) replacement body)
+  | iota body => iota (substAt (depth + 1) replacement body)
   | app function argument =>
       app (substAt depth replacement function)
         (substAt depth replacement argument)
@@ -66,45 +71,12 @@ def substAt (depth : Nat) (replacement : Term) : Term → Term
 def instantiate (body argument : Term) : Term :=
   substAt 0 argument body
 
-/-- One unfolding of a recursive term: `μX.F(X) ↦ F(μX.F(X))`. -/
-def unfoldMu (body : Term) : Term :=
-  instantiate body (.mu body)
-
-/--
-Checks that every occurrence of one de Bruijn variable is used as a projector
-head or lies inside a starred projector application (`* A` or `* A t`).
-Binder traversal adjusts the tracked index.
--/
-def starGuardedAt (recursive : Nat) : Term → Bool
-  | bvar index => index != recursive
-  | const _ => true
-  | lam body => starGuardedAt (recursive + 1) body
-  | mu body => starGuardedAt (recursive + 1) body
-  | app function argument =>
-      match function with
-      | .star => true
-      | .app .star _ => true
-      | .bvar index =>
-        if index = recursive then starGuardedAt recursive argument
-        else starGuardedAt recursive function && starGuardedAt recursive argument
-      | _ => starGuardedAt recursive function && starGuardedAt recursive argument
-  | star => true
-
-/-- Admissibility check for the variable bound by an outer `μ`. -/
-def MuBodyGuarded (body : Term) : Prop :=
-  starGuardedAt 0 body = true
-
-instance (body : Term) : Decidable body.MuBodyGuarded :=
-  by
-    unfold MuBodyGuarded
-    infer_instance
-
 /-- `WellScoped bound t` means every variable in `t` is bound below `bound`. -/
 def WellScoped (bound : Nat) : Term → Prop
   | bvar index => index < bound
   | const _ => True
   | lam body => WellScoped (bound + 1) body
-  | mu body => WellScoped (bound + 1) body
+  | iota body => WellScoped (bound + 1) body
   | app function argument =>
       WellScoped bound function ∧ WellScoped bound argument
   | star => True
@@ -114,7 +86,7 @@ def WellScoped (bound : Nat) : Term → Prop
     | .bvar index => inferInstanceAs (Decidable (index < bound))
     | .const _ => isTrue trivial
     | .lam body => wellScopedDecidable (bound + 1) body
-    | .mu body => wellScopedDecidable (bound + 1) body
+    | iota body => wellScopedDecidable (bound + 1) body
     | .app function argument =>
         @instDecidableAnd (WellScoped bound function) (WellScoped bound argument)
           (wellScopedDecidable bound function) (wellScopedDecidable bound argument)
@@ -134,7 +106,7 @@ theorem WellScoped.mono (hScoped : WellScoped bound term)
   | lam body inductionHypothesis =>
       simp only [WellScoped] at hScoped ⊢
       exact inductionHypothesis hScoped (Nat.succ_le_succ hBound)
-    | mu body inductionHypothesis =>
+    | iota body inductionHypothesis =>
       simp only [WellScoped] at hScoped ⊢
       exact inductionHypothesis hScoped (Nat.succ_le_succ hBound)
   | app function argument functionHypothesis argumentHypothesis =>
@@ -154,7 +126,7 @@ theorem substAt_eq_self_of_wellScoped
   | lam body inductionHypothesis =>
       simp only [WellScoped] at hScoped
       simp [substAt, inductionHypothesis hScoped]
-    | mu body inductionHypothesis =>
+    | iota body inductionHypothesis =>
       simp only [WellScoped] at hScoped
       simp [substAt, inductionHypothesis hScoped]
   | app function argument functionHypothesis argumentHypothesis =>
@@ -174,7 +146,7 @@ theorem shift_shift_of_le (term : Term) (left right inner outer : Nat)
       have hOuter' : outer + 1 ≤ inner + 1 + left := by omega
       simp [shift, inductionHypothesis (left := left) (inner := inner + 1)
         (outer := outer + 1) (Nat.succ_le_succ hInner) hOuter']
-  | mu body inductionHypothesis =>
+  | iota body inductionHypothesis =>
       have hOuter' : outer + 1 ≤ inner + 1 + left := by omega
       simp [shift, inductionHypothesis (left := left) (inner := inner + 1)
         (outer := outer + 1) (Nat.succ_le_succ hInner) hOuter']
@@ -196,7 +168,7 @@ theorem shift_shift_commute (term : Term) (left right base extra : Nat) :
   | lam body inductionHypothesis =>
       simpa [shift, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
         inductionHypothesis (base := base + 1)
-  | mu body inductionHypothesis =>
+  | iota body inductionHypothesis =>
       simpa [shift, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
         inductionHypothesis (base := base + 1)
   | app function argument functionHypothesis argumentHypothesis =>
@@ -219,7 +191,7 @@ theorem shift_substAt (term replacement : Term) (amount depth extra : Nat) :
   | lam body inductionHypothesis =>
       simpa [substAt, shift, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
         inductionHypothesis (depth := depth + 1)
-  | mu body inductionHypothesis =>
+  | iota body inductionHypothesis =>
       simpa [substAt, shift, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
         inductionHypothesis (depth := depth + 1)
   | app function argument functionHypothesis argumentHypothesis =>
@@ -247,7 +219,7 @@ theorem substAt_shift_of_le (term replacement : Term) (amount depth cutoff : Nat
       simpa [shift, substAt, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
         inductionHypothesis (depth := depth + 1) (cutoff := cutoff + 1)
           (Nat.succ_le_succ hCutoff)
-  | mu body inductionHypothesis =>
+  | iota body inductionHypothesis =>
       simpa [shift, substAt, Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
         inductionHypothesis (depth := depth + 1) (cutoff := cutoff + 1)
           (Nat.succ_le_succ hCutoff)
@@ -272,7 +244,7 @@ theorem substAt_shift_succ_of_le
     simp [shift, substAt,
     inductionHypothesis (cutoff := cutoff + 1) (depth := depth + 1)
       (Nat.succ_le_succ hCutoff) hDepth']
-  | mu body inductionHypothesis =>
+  | iota body inductionHypothesis =>
     have hDepth' : depth + 1 ≤ cutoff + 1 + amount := by omega
     simp [shift, substAt,
     inductionHypothesis (cutoff := cutoff + 1) (depth := depth + 1)
@@ -297,6 +269,45 @@ theorem substAt_shift_one (term replacement : Term) (depth : Nat) :
       shift 1 0 (substAt depth replacement term) := by
   simpa using substAt_shift_of_le term replacement 1 depth 0 (Nat.zero_le depth)
 
+/-- Opening with variable zero cancels the shift above its self binder. -/
+theorem substAt_bvar_zero_shift_above (term : Term) (depth : Nat) :
+    substAt depth (.bvar 0) (shift 1 (depth + 1) term) = term := by
+  induction term generalizing depth with
+  | bvar index => grind [shift, substAt]
+  | const name => rfl
+  | lam body inductionHypothesis =>
+      simp [shift, substAt, inductionHypothesis]
+    | iota body inductionHypothesis =>
+      simp [shift, substAt, inductionHypothesis]
+  | app function argument functionHypothesis argumentHypothesis =>
+      simp [shift, substAt, functionHypothesis, argumentHypothesis]
+  | star => rfl
+
+  theorem substAt_bvar_shift_above (term : Term) (binders depth : Nat) :
+    substAt depth (.bvar binders)
+      (shift (binders + 1) (depth + 1) term) =
+      shift binders depth term := by
+    induction term generalizing binders depth with
+    | bvar index => grind [shift, substAt]
+    | const name => rfl
+    | lam body inductionHypothesis =>
+      simp [shift, substAt, inductionHypothesis]
+    | iota body inductionHypothesis =>
+      simp [shift, substAt, inductionHypothesis]
+    | app function argument functionHypothesis argumentHypothesis =>
+      simp [shift, substAt, functionHypothesis, argumentHypothesis]
+    | star => rfl
+
+@[simp] theorem instantiate_shift_above_self (body : Term) :
+    instantiate (shift 1 1 body) (.bvar 0) = body := by
+  simpa [instantiate] using substAt_bvar_zero_shift_above body 0
+
+@[simp] theorem instantiate_shift_above_self_under
+    (body : Term) (binders : Nat) :
+    instantiate (shift (binders + 1) 1 body) (.bvar binders) =
+      shift binders 0 body := by
+  simpa [instantiate] using substAt_bvar_shift_above body binders 0
+
 /-- Substituting through a β-contractum composes the two substitutions. -/
 theorem substAt_substAt (body argument replacement : Term) (outer inner : Nat) :
     substAt (outer + inner) replacement (substAt inner argument body) =
@@ -316,7 +327,7 @@ theorem substAt_substAt (body argument replacement : Term) (outer inner : Nat) :
   | const name => rfl
   | lam body inductionHypothesis =>
       simp [substAt, Nat.add_assoc, inductionHypothesis]
-  | mu body inductionHypothesis =>
+    | iota body inductionHypothesis =>
       simp [substAt, Nat.add_assoc, inductionHypothesis]
   | app function argument functionHypothesis argumentHypothesis =>
       simp [substAt, functionHypothesis, argumentHypothesis]
@@ -329,19 +340,9 @@ theorem substAt_instantiate (body argument replacement : Term) (depth : Nat) :
         (substAt depth replacement argument) := by
   simpa [instantiate] using substAt_substAt body argument replacement depth 0
 
-/-- Substitution commutes with one recursive unfolding. -/
-theorem substAt_unfoldMu (body replacement : Term) (depth : Nat) :
-    substAt depth replacement (unfoldMu body) =
-      unfoldMu (substAt (depth + 1) replacement body) := by
-  simp [unfoldMu, substAt_instantiate, substAt]
-
 end Term
 
-/--
-A global definition environment `Δ`. Since `defs` is a function, every
-constant has at most one body. Bodies may refer to any constants in `Δ`, so
-the environment admits mutually recursive definitions.
--/
+/-- A deterministic environment of closed, possibly mutually recursive bodies. -/
 structure DefEnv where
   defs : Const → Option Term
   closed : ∀ name body, defs name = some body → body.Closed
