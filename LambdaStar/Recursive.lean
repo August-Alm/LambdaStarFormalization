@@ -16,10 +16,21 @@ structure RecursiveBody where
 
 namespace RecursiveSignature
 
-/-- All recursive signatures are available as scoped typing assumptions. -/
+/-- All recursive signatures, used while checking type formation. -/
 def context (signatures : List RecursiveSignature) : TypingContext :=
   signatures.map fun signature =>
     (.app signature.type (.const signature.name), .const signature.name)
+
+/-- Signature equations excluding names implemented in the current phase. -/
+def contextWithout (signatures : List RecursiveSignature)
+    (excluded : List Const) : TypingContext :=
+  match signatures with
+  | [] => []
+  | signature :: signatures =>
+      if signature.name ∈ excluded then contextWithout signatures excluded
+      else
+        (.app signature.type (.const signature.name), .const signature.name) ::
+          contextWithout signatures excluded
 
 def lookup (signatures : List RecursiveSignature) (name : Const) : Option Term :=
   match signatures with
@@ -74,26 +85,32 @@ def DefEnv.extend (prior : DefEnv) (bodies : List RecursiveBody) : DefEnv where
 An implementation realizes its declared type. Ordinary definitions check the
 body directly. For a previously validated named self type `A = ιx.T`, the
 implementation of `c : A` checks against `T[c/x]`, preserving `c` as the self
-index instead of substituting the implementation body for it.
+index instead of substituting the implementation body for it. Type formation
+uses `formationContext`; every value-producing case uses `realizationContext`.
 -/
 inductive ChecksImplementation
-    (prior : DefEnv) (context : TypingContext)
+    (prior : DefEnv) (formationContext realizationContext : TypingContext)
     (name : Const) (body : Term) : Term → Prop where
-  | direct (check : Checks prior context body type) :
-      ChecksImplementation prior context name body type
+  | typeFormation (check : Checks prior formationContext body .star) :
+      ChecksImplementation prior formationContext realizationContext
+        name body .star
+  | direct (check : Checks prior realizationContext body type) :
+      ChecksImplementation prior formationContext realizationContext
+        name body type
   | namedSelf
       (defined : prior.defs typeName = some (.iota selfBody))
-      (check : Checks prior context body
+      (check : Checks prior realizationContext body
         (selfBody.instantiate (.const name))) :
-      ChecksImplementation prior context name body (.const typeName)
+      ChecksImplementation prior formationContext realizationContext
+        name body (.const typeName)
   | namedSelfFunction
       (bodyShape : body = .lam functionBody)
       (defined : prior.defs typeName = some (.iota selfBody))
-      (check : Checks prior (context.bind domain) functionBody
+      (check : Checks prior (realizationContext.bind domain) functionBody
         (selfBody.instantiate
           (.app (.const name)
             (.app (domain.shift 1 0) (.bvar 0))))) :
-          ChecksImplementation prior context name body
+          ChecksImplementation prior formationContext realizationContext name body
         (Term.arrow domain (.const typeName))
 
 /--
@@ -102,18 +119,21 @@ named-self case records the validated type body and keeps the closure name as
 the self index.
 -/
 theorem ChecksImplementation.sound
-    (implementation : ChecksImplementation prior context name body type) :
-    ContextEquiv prior context (.app type body) body ∨
+    (implementation : ChecksImplementation prior formationContext
+      realizationContext name body type) :
+    (type = .star ∧
+      ContextEquiv prior formationContext (.app .star body) body) ∨
+    ContextEquiv prior realizationContext (.app type body) body ∨
       (∃ typeName selfBody,
         type = .const typeName ∧
         prior.defs typeName = some (.iota selfBody) ∧
-        ContextEquiv prior context
+        ContextEquiv prior realizationContext
           (.app (selfBody.instantiate (.const name)) body) body) ∨
       (∃ domain typeName selfBody functionBody,
         body = .lam functionBody ∧
         type = Term.arrow domain (.const typeName) ∧
         prior.defs typeName = some (.iota selfBody) ∧
-        ContextEquiv prior (context.bind domain)
+        ContextEquiv prior (realizationContext.bind domain)
           (.app
             (selfBody.instantiate
               (.app (.const name)
@@ -121,17 +141,21 @@ theorem ChecksImplementation.sound
             functionBody)
           functionBody) := by
   cases implementation with
-  | direct check => exact Or.inl check.sound
+  | typeFormation check => exact Or.inl ⟨rfl, check.sound⟩
+  | direct check => exact Or.inr (Or.inl check.sound)
   | @namedSelf typeName selfBody defined check =>
-      exact Or.inr (Or.inl ⟨typeName, selfBody, rfl, defined, check.sound⟩)
-  | namedSelfFunction bodyShape defined check =>
       exact Or.inr (Or.inr
+        (Or.inl ⟨typeName, selfBody, rfl, defined, check.sound⟩))
+  | namedSelfFunction bodyShape defined check =>
+      exact Or.inr (Or.inr (Or.inr
         ⟨_, _, _, _,
-          bodyShape, rfl, defined, check.sound⟩)
+          bodyShape, rfl, defined, check.sound⟩))
 
 /--
-One validation phase. All signatures are in scope, but reduction may unfold
-only `prior`; the bodies in this phase become operational after validation.
+One validation phase. All signatures are available for type formation. Value
+realization excludes every signature implemented in this phase, preventing
+self-certification and same-phase mutual certification. Reduction may unfold
+only `prior`; phase bodies become operational after validation.
 -/
 structure ChecksRecursivePhase
     (prior : DefEnv) (signatures : List RecursiveSignature)
@@ -142,6 +166,7 @@ structure ChecksRecursivePhase
   declared : ∀ definition ∈ bodies,
     ∃ type, RecursiveSignature.lookup signatures definition.name = some type ∧
       ChecksImplementation prior (RecursiveSignature.context signatures)
+        (RecursiveSignature.contextWithout signatures (bodies.map (·.name)))
         definition.name definition.body type
 
 /-- A sequence of phases, each exposing only previously validated bodies. -/
@@ -160,6 +185,7 @@ theorem ChecksRecursivePhase.hasType
     (membership : definition ∈ bodies) :
     ∃ type, RecursiveSignature.lookup signatures definition.name = some type ∧
       ChecksImplementation prior (RecursiveSignature.context signatures)
+        (RecursiveSignature.contextWithout signatures (bodies.map (·.name)))
         definition.name definition.body type :=
   phase.declared definition membership
 

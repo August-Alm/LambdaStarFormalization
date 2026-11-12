@@ -57,8 +57,10 @@ def constructorBodies : List RecursiveBody :=
    ⟨falseName, falseBody, falseBody_closed⟩]
 
 theorem bool_has_type : ChecksImplementation DefEnv.empty
-    (RecursiveSignature.context signatures) boolName boolBody .star := by
-  apply ChecksImplementation.direct
+    (RecursiveSignature.context signatures)
+    (RecursiveSignature.contextWithout signatures (typeBodies.map (·.name)))
+    boolName boolBody .star := by
+  apply ChecksImplementation.typeFormation
   apply Checks.selfFormation
   apply Checks.certified
   apply ContextEquiv.starChecking
@@ -67,6 +69,8 @@ theorem bool_has_type : ChecksImplementation DefEnv.empty
 
 theorem true_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
     (RecursiveSignature.context signatures)
+    (RecursiveSignature.contextWithout signatures
+      (constructorBodies.map (·.name)))
     trueName trueBody (.const boolName) := by
   apply ChecksImplementation.namedSelf
   · rfl
@@ -76,6 +80,8 @@ theorem true_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
 
 theorem false_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
     (RecursiveSignature.context signatures)
+    (RecursiveSignature.contextWithout signatures
+      (constructorBodies.map (·.name)))
     falseName falseBody (.const boolName) := by
   apply ChecksImplementation.namedSelf
   · rfl

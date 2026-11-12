@@ -65,8 +65,10 @@ def constructorBodies : List RecursiveBody :=
    ⟨succName, succBody, succBody_closed⟩]
 
 theorem nat_has_type : ChecksImplementation DefEnv.empty
-    (RecursiveSignature.context signatures) natName natBody .star := by
-  apply ChecksImplementation.direct
+    (RecursiveSignature.context signatures)
+    (RecursiveSignature.contextWithout signatures (typeBodies.map (·.name)))
+    natName natBody .star := by
+  apply ChecksImplementation.typeFormation
   apply Checks.selfFormation
   apply Checks.certified
   apply ContextEquiv.starChecking
@@ -75,6 +77,8 @@ theorem nat_has_type : ChecksImplementation DefEnv.empty
 
 theorem zero_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
     (RecursiveSignature.context signatures)
+    (RecursiveSignature.contextWithout signatures
+      (constructorBodies.map (·.name)))
     zeroName zeroBody (.const natName) := by
   apply ChecksImplementation.namedSelf
   · rfl
@@ -84,6 +88,8 @@ theorem zero_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
 
 theorem succ_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
     (RecursiveSignature.context signatures)
+    (RecursiveSignature.contextWithout signatures
+      (constructorBodies.map (·.name)))
     succName succBody (Term.arrow (.const natName) (.const natName)) := by
   apply ChecksImplementation.namedSelfFunction
   · rfl

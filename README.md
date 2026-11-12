@@ -45,8 +45,9 @@ proved.
 ## Recursive Blocks
 
 A recursive block separates signatures from bodies. Every signature is in
-scope while checking a phase, but reduction may unfold only bodies validated
-by earlier phases. Successful phases extend the environment for later ones.
+scope for type formation, while value realization omits signatures implemented
+in the current phase. Reduction may unfold only bodies validated by earlier
+phases. Successful phases extend the environment for later ones.
 
 Implementation checking distinguishes three cases:
 
@@ -117,6 +118,8 @@ rec {
 - `Recursive.lean`: recursive signatures, closure-aware implementation checks,
   and phased body validation.
 - `BoolTest.lean` and `NatTest.lean`: annotated recursive declarations.
+- `BoolCanonicity.lean`: regression proofs for the self-certifying Bool
+  declaration that the phase realization context now excludes.
 
 ## Status
 
@@ -128,8 +131,19 @@ are proved without `sorry`. In particular, the validated declarations establish
 
 The corresponding final theorems are `BoolTest.block_valid` and
 `NatTest.block_valid`. These prove the scoped operational typing declarations;
-global normalization, unconditional confluence, and datatype canonicity remain
-separate metatheoretic questions.
+global normalization and unconditional confluence remain separate
+metatheoretic questions.
+
+Recursive validation separates assumptions used for type formation from those
+allowed to certify implementations. Type formation receives all signatures,
+while value realization excludes every name implemented in the current phase.
+This prevents a declaration such as `junk : Bool = junk` from certifying itself
+with its own signature, and also blocks same-phase mutual self-certification.
+`BoolCanonicity.unsafe_junk_has_type` records the old derivation under an
+explicitly unsafe context; `junk_signature_excluded` proves that its crucial
+equation is absent from the actual phase realization context. A full theorem
+that every closed Bool inhabitant is equivalent to `true` or `false` remains to
+be proved.
 
 ```sh
 lake build

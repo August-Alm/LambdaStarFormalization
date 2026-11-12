@@ -8,4 +8,5 @@ import LambdaStar.NamedSyntax
 import LambdaStar.SelfTyping
 import LambdaStar.Recursive
 import LambdaStar.BoolTest
+import LambdaStar.BoolCanonicity
 import LambdaStar.NatTest
