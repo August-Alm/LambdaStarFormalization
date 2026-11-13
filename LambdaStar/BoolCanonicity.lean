@@ -19,7 +19,7 @@ whose realization context excludes all names implemented in that phase.
 -/
 theorem unsafe_junk_has_type : ChecksImplementation
   (DefEnv.empty.extend BoolTest.typeBodies)
-  (RecursiveSignature.context signatures)
+  (DefEnv.empty.extend BoolTest.typeBodies)
     (RecursiveSignature.context signatures)
     junkName (.const junkName) (.const BoolTest.boolName) := by
   apply ChecksImplementation.namedSelf
@@ -31,13 +31,14 @@ theorem unsafe_junk_has_type : ChecksImplementation
     have selfReduction : Step (DefEnv.empty.extend BoolTest.typeBodies) 0
         (.app BoolTest.boolBody (.const junkName))
         (.app
-          ((match BoolTest.boolBody with
-            | .iota body => body
-            | _ => .star).instantiate
-            (.const junkName))
+          (BoolTest.boolFamily.instantiate (.const junkName))
           (.const junkName)) := by
-      simp [BoolTest.boolBody, BoolTest.boolBodyNamed]
-      exact Step.selfInstantiation
+      change Step (DefEnv.empty.extend BoolTest.typeBodies) 0
+        (.app (Term.self BoolTest.boolFamily) (.const junkName))
+        (.app
+          (BoolTest.boolFamily.instantiate (.const junkName))
+          (.const junkName))
+      exact Step.beta
     have signatureAssumption : ContextEquiv
         (DefEnv.empty.extend BoolTest.typeBodies)
         (RecursiveSignature.context signatures)

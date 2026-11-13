@@ -5,8 +5,8 @@ Bool and its constructors form one recursive declaration block:
 ```text
 rec {
   Bool : * =
-    ιb. ΠP : Bool → *.
-      P true → P false → P b
+    λb. (ΠP : Bool → *.
+      P true → P false → P b) b
 
   true : Bool =
     λP : Bool → *.
@@ -28,9 +28,10 @@ Church terms are only readable erasures.
 
 Validation is phased:
 
-1. Assume all three signatures and validate the Bool self-type body.
+1. Validate the Bool projector with `RecursiveIdempotence`, using its body in a
+  provisional environment but not its signature equation in the outer context.
 2. Expose only the validated Bool body.
-3. Validate each constructor body against the Bool body instantiated with its
+3. Validate each constructor body against the Bool family instantiated with its
   stable name: `T[true/b]` or `T[false/b]`.
 4. Expose the complete environment only after both phases succeed.
 

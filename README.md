@@ -4,7 +4,8 @@ We introduce the lambda-star calculus, a very simple extension of the untyped
 lambda calculus. By identifying idempotents in this calculus with types, we
 can propose an operational interpretation of type checking in System Fω, and
 extensions involving dependent types. Allowing mutually recursive definitions
-extends the proposal to inductive types, including dependent GADTs.
+supports recursive projector encodings such as the Bool and Nat developments
+below; a general account of inductive types and dependent GADTs remains a goal.
 
 ## Introduction
 
@@ -161,13 +162,12 @@ out change, if we add dependent products. One must only take care and
 ```
 We believe that the interpretation of Fω can be extended to the full Calculus of Constructions.
 
-## Lean formalization and inductive types extension
+## Lean formalization and recursive projectors
 
-Our formalization adds self-references and finite recursive
-definition environments.
+Our formalization adds finite recursive definition environments.
 
 ```text
-t, u ::= x | c | λx.t | ιx.T | (t u) | *
+t, u ::= x | c | λx.t | (t u) | *
 ```
 
 Here `x` ranges over bound variables and `c` ranges over **closure names**.
@@ -184,8 +184,7 @@ Reduction is indexed by a natural-number certification stage. At every stage
 `n`, the root contractions are:
 
 ```text
-(λx.t) u             ↦ₙ [u/x]t
-(ιx.T) t             ↦ₙ ([t/x]T) t
+(λx.t) u             ↦ₙ t{x := u}
 c u                  ↦ₙ b u                 if Δ(c) = b
 (* A) ((* A) t)      ↦ₙ (* A) t
 ```
@@ -206,16 +205,16 @@ Requiring the certificate at stage `n` before adding the contraction at stage
 One-step reduction is also closed under every immediate term context:
 
 ```text
-t ↦ₙ t'                  T ↦ₙ T'
-──────────────           ──────────────
-λx.t ↦ₙ λx.t'            ιx.T ↦ₙ ιx.T'
+t ↦ₙ t'
+──────────────
+λx.t ↦ₙ λx.t'
 
 t ↦ₙ t'                  u ↦ₙ u'
 ──────────────           ──────────────
 t u ↦ₙ t' u              t u ↦ₙ t u'
 ```
 
-These four congruence rules together with the five root contractions above are
+These three congruence rules together with the four root contractions above are
 all constructors of the one-step relation. Every body in `Δ` is closed, and
 each name has at most one body.
 
@@ -231,17 +230,19 @@ stratified, so a `* A ↦ A` step may use only an idempotence derivation from an
 earlier stage.
 
 
-### Scoped self types
+### Self-indexed projectors
 
-The self type `ιx.T` is also a projector. Applying it to a candidate `t`
-specializes the body at that same candidate:
+A family `T` may depend on the value `x` being checked. Its associated
+self-indexed projector is the ordinary lambda term
 
 ```text
-(ιx.T) t ↦ ([t/x]T) t
+S = λx. T x
 ```
 
-This is what allows an encoded datatype to state an elimination principle
-whose result mentions the value being checked.
+Consequently `S t ↦ T{x := t} t` is just beta reduction; there is no separate
+self binder or self-instantiation rule in the core calculus. This shape is not
+in itself recursive or inductive. It merely packages a value-indexed family as
+a projector.
 
 `Checks Δ Γ t A` is a proof-producing operational typing judgment. Its
 soundness theorem yields contextual projector equality:
@@ -250,45 +251,63 @@ soundness theorem yields contextual projector equality:
 Checks Δ Γ t A  implies  Γ ⊢ A t ≃ t
 ```
 
-Self introduction requires the instantiated body:
-
-```text
-Γ ⊢ t : [t/x]T
----------------- SelfGen
-Γ ⊢ t : ιx.T
-```
-
-Self elimination exposes it, and formation checks the body under one fresh
-neutral assumption. There is no cyclic rule that assumes the equality being
-proved.
+`Checks` has no unrestricted cyclic rule that assumes its own conclusion. The
+recursive extension below adds one explicitly guarded cycle to contextual
+equality.
 
 ### Recursive blocks
 
-A recursive block separates signatures from bodies. Every signature is in
-scope for type formation, while value realization omits signatures implemented
-in the current phase. Reduction may unfold only bodies validated by earlier
-phases. Successful phases extend the environment for later ones.
+A recursive block separates signatures from bodies. Checking omits every
+signature implemented in the current phase, so a declaration cannot use its
+own claimed type as evidence. Reduction may unfold only bodies validated by
+earlier phases. Successful phases extend the environment for later ones.
 
-Implementation checking distinguishes three cases:
+Recursion comes from closure names in the block: for example, the family in
+the body of `Bool` refers to the closure name `Bool`. This is independent of
+the lambda shape above. A self-indexed projector whose family mentions no
+recursive closure is not thereby a recursive type.
 
-1. An ordinary implementation body is checked directly against its declared
-  projector.
-2. If `A = ιx.T` was validated in an earlier phase, the body for a named closure
-  `c : A` is checked against `T[c/x]`.
-3. A function returning a named self type is checked pointwise under its domain
-  assumption.
+Recursion is represented only by the environment equation `Δ(A) = S`; there
+is no `μ` term. Operationally, the equation is exposed at an application head:
 
-The latter two cases preserve the stable closure name instead of substituting
-its implementation body. Thus constructor indices remain `P true`, `P zero`,
-and `P (succ n)`. Concretely, the body of `succ : Nat → Nat` is checked under
-`n : Nat` against the Nat self body at `succ (Nat n)`.
+```text
+A u ↦ Δ(A) u = S u
+```
+
+Recursive type formation uses the following explicit contextual-equality axiom:
+
+```text
+Δ(A) = λx. T x
+ΓA = (* A ≃ A) :: Γ
+Δ ; ΓA, x : A ⊢ * T ≃ T
+-------------------------------- RecursiveIdempotence
+Δ ; Γ ⊢ λy. A (A y) ≃ λy. A y
+```
+
+The environment lookup is the guard: the recursive hypotheses `A : *` and
+`x : A` are available only while checking the unfolded family `T`, and do not
+enter the surrounding context. Star checking then derives `* A ≃ A` from the
+conclusion. This is an axiom of contextual equality, not a reduction rule; its
+soundness has not yet been derived from a fixed-point model or a general
+guarded-cycle theorem.
+
+During a type phase, the phase bodies are installed in a provisional
+environment for this guarded check, while all current-phase signature equations
+remain excluded. Value-producing definitions still unfold only bodies from
+earlier validated phases.
+
+For a previously available self-indexed projector `A = λx. T x`, constructor
+checking preserves stable closure names. A body for `c : A` is checked against
+`T{x := c}`, and a function returning `A` is checked pointwise under its domain
+assumption. Thus indices remain `P true`, `P zero`, and `P (succ n)` rather than
+being replaced by constructor implementation bodies.
 
 Bool therefore uses:
 
 ```text
 rec {
   Bool  : * =
-    ιb. ΠP : Bool → *. P true → P false → P b
+    λb. (ΠP : Bool → *. P true → P false → P b) b
 
   true  : Bool =
     λP : Bool → *. λt : P true. λf : P false. t
@@ -298,9 +317,8 @@ rec {
 }
 ```
 
-The Bool body is validated first. Constructor validation may unfold that
-validated body, but neither constructor may unfold itself. Nat follows the
-same two-phase discipline with signatures for `Nat`, `zero`, and `succ`.
+The guarded axiom validates the Bool closure in the type phase before its body
+is exposed to constructor checks. Nat follows the same two-phase discipline.
 
 Nat uses the full induction projector and supplies the induction hypothesis in
 its successor implementation:
@@ -308,8 +326,8 @@ its successor implementation:
 ```text
 rec {
   Nat  : * =
-    ιn. ΠP : Nat → *.
-      (Πk : Nat. P k → P (succ k)) → P zero → P n
+    λn. (ΠP : Nat → *.
+      (Πk : Nat. P k → P (succ k)) → P zero → P n) n
 
   zero : Nat =
     λP : Nat → *.
@@ -330,10 +348,9 @@ rec {
 
 - `Syntax.lean`: terms, arrow projectors, substitution, scoping, and closed
   environments.
-- `Reduction.lean`: staged beta, closure application, self instantiation, and
-  star reduction.
+- `Reduction.lean`: staged beta, closure application, and star reduction.
 - `Confluence.lean`: joinability and conditional confluence infrastructure.
-- `SelfTyping.lean`: scoped self-type rules, proof-producing contextual
+- `SelfTyping.lean`: scoped projector equality, proof-producing contextual
   normalization, and operational soundness.
 - `Recursive.lean`: recursive signatures, closure-aware implementation checks,
   and phased body validation.
@@ -346,14 +363,13 @@ rec {
 The Bool and Nat type phases, constructor phases, and complete recursive blocks
 are proved without `sorry`. In particular, the validated declarations establish
 `Bool : *`, `true : Bool`, `false : Bool`, `Nat : *`, `zero : Nat`, and
-`succ : Nat → Nat`.
-The corresponding final theorems are `BoolTest.block_valid` and
-`NatTest.block_valid`. Global normalization and unconditional confluence remain separate
+`succ : Nat → Nat`. The corresponding final theorems are
+`BoolTest.block_valid` and `NatTest.block_valid`. These results depend on the
+`RecursiveIdempotence` axiom above. Global normalization, a semantic soundness
+theorem for guarded cycles, and unconditional confluence remain separate
 metatheoretic questions.
 
-Recursive validation separates assumptions used for type formation from those
-allowed to certify implementations. Type formation receives all signatures,
-while value realization excludes every name implemented in the current phase.
+Recursive validation excludes every name implemented in the current phase.
 This prevents a declaration such as `junk : Bool = junk` from certifying itself
 with its own signature, and also blocks same-phase mutual self-certification.
 `BoolCanonicity.unsafe_junk_has_type` records the old derivation under an

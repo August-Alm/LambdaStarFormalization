@@ -7,7 +7,6 @@ inductive NamedTerm where
   | var : String → NamedTerm
   | const : Const → NamedTerm
   | lam : String → NamedTerm → NamedTerm
-  | iota : String → NamedTerm → NamedTerm
   | app : NamedTerm → NamedTerm → NamedTerm
   | star : NamedTerm
   deriving DecidableEq, Repr
@@ -23,8 +22,6 @@ def subst (name : String) (replacement : NamedTerm) : NamedTerm → NamedTerm
   | const constant => const constant
   | lam binder body =>
       if binder = name then lam binder body else lam binder (subst name replacement body)
-    | iota binder body =>
-      if binder = name then iota binder body else iota binder (subst name replacement body)
   | app function argument =>
       app (subst name replacement function) (subst name replacement argument)
   | star => star
@@ -38,9 +35,12 @@ def compile (context : List String) : NamedTerm → Term
   | var name => .bvar (indexOf name context)
   | const name => .const name
   | lam binder body => .lam (compile (binder :: context) body)
-  | iota binder body => .iota (compile (binder :: context) body)
   | app function argument => .app (compile context function) (compile context argument)
   | star => .star
+
+/-- Package a self-indexed family as the ordinary lambda `λx. family x`. -/
+def self (binder : String) (family : NamedTerm) : NamedTerm :=
+  lam binder (.app family (.var binder))
 
 /-- `λx : A. t = λx. t{x := A x}`. -/
 def typedLam (binder : String) (type body : NamedTerm) : NamedTerm :=

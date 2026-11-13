@@ -21,13 +21,16 @@ def stepTypeNamed : NamedTerm :=
     arrow "induction" "proof" (.app (.var "P") (.var "k"))
       (.app (.var "P") (.app (.const succName) (.var "k")))
 
-/-- `ιn. ΠP : Nat → *. (Πk : Nat. P k → P (succ k)) → P zero → P n`. -/
+/-- `ΠP : Nat → *. (Πk : Nat. P k → P (succ k)) → P zero → P n`. -/
+def natFamilyNamed : NamedTerm :=
+  pi "eliminate" "P" predicateTypeNamed <|
+    arrow "onSucc" "step" stepTypeNamed <|
+      arrow "onZero" "base" (.app (.var "P") (.const zeroName))
+        (.app (.var "P") (.var "n"))
+
+/-- The self-indexed projector `λn. family(n) n`. -/
 def natBodyNamed : NamedTerm :=
-  .iota "n" <|
-    pi "eliminate" "P" predicateTypeNamed <|
-      arrow "onSucc" "step" stepTypeNamed <|
-        arrow "onZero" "base" (.app (.var "P") (.const zeroName))
-          (.app (.var "P") (.var "n"))
+  self "n" natFamilyNamed
 
 /-- `λP : Nat → *. λs : step(P). λz : P zero. z`. -/
 def zeroBodyNamed : NamedTerm :=
@@ -44,6 +47,7 @@ def succBodyNamed : NamedTerm :=
           (apps (.var "s")
             [.var "n", apps (.var "n") [.var "P", .var "s", .var "z"]])
 
+def natFamily : Term := natFamilyNamed.compile ["n"]
 def natBody : Term := natBodyNamed.compile []
 def zeroBody : Term := zeroBodyNamed.compile []
 def succBody : Term := succBodyNamed.compile []
@@ -65,18 +69,21 @@ def constructorBodies : List RecursiveBody :=
    ⟨succName, succBody, succBody_closed⟩]
 
 theorem nat_has_type : ChecksImplementation DefEnv.empty
-    (RecursiveSignature.context signatures)
+    (DefEnv.empty.extend typeBodies)
     (RecursiveSignature.contextWithout signatures (typeBodies.map (·.name)))
     natName natBody .star := by
-  apply ChecksImplementation.typeFormation
-  apply Checks.selfFormation
-  apply Checks.certified
-  apply ContextEquiv.starChecking
-  apply ContextEquiv.ofContextualStepsEq 2000
-  rfl
+  apply ChecksImplementation.recursiveTypeFormation
+  · rfl
+  · apply Checks.certified
+    apply ContextEquiv.starChecking
+    apply ContextEquiv.recursiveIdempotence
+    · rfl
+    · apply ContextEquiv.starChecking
+      apply ContextEquiv.ofContextualStepsEq 4000
+      rfl
 
 theorem zero_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
-    (RecursiveSignature.context signatures)
+  ((DefEnv.empty.extend typeBodies).extend constructorBodies)
     (RecursiveSignature.contextWithout signatures
       (constructorBodies.map (·.name)))
     zeroName zeroBody (.const natName) := by
@@ -87,12 +94,11 @@ theorem zero_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
     rfl
 
 theorem succ_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
-    (RecursiveSignature.context signatures)
+  ((DefEnv.empty.extend typeBodies).extend constructorBodies)
     (RecursiveSignature.contextWithout signatures
       (constructorBodies.map (·.name)))
     succName succBody (Term.arrow (.const natName) (.const natName)) := by
   apply ChecksImplementation.namedSelfFunction
-  · rfl
   · rfl
   · apply Checks.certified
     apply ContextEquiv.ofContextualStepsEq 2000

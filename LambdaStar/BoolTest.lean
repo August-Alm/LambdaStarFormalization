@@ -16,13 +16,16 @@ def falseName : Const := "false"
 def predicateTypeNamed : NamedTerm :=
   arrow "predicate" "value" (.const boolName) .star
 
-/-- `ιb. ΠP : Bool → *. P true → P false → P b`. -/
+/-- `ΠP : Bool → *. P true → P false → P b`. -/
+def boolFamilyNamed : NamedTerm :=
+  pi "eliminate" "P" predicateTypeNamed <|
+    arrow "onTrue" "trueProof" (.app (.var "P") (.const trueName)) <|
+      arrow "onFalse" "falseProof" (.app (.var "P") (.const falseName))
+        (.app (.var "P") (.var "b"))
+
+/-- The self-indexed projector `λb. (ΠP : Bool → *. P true → P false → P b) b`. -/
 def boolBodyNamed : NamedTerm :=
-  .iota "b" <|
-    pi "eliminate" "P" predicateTypeNamed <|
-      arrow "onTrue" "trueProof" (.app (.var "P") (.const trueName)) <|
-        arrow "onFalse" "falseProof" (.app (.var "P") (.const falseName))
-          (.app (.var "P") (.var "b"))
+  self "b" boolFamilyNamed
 
 /-- `λP : Bool → *. λt : P true. λf : P false. t`. -/
 def trueBodyNamed : NamedTerm :=
@@ -36,6 +39,7 @@ def falseBodyNamed : NamedTerm :=
     typedLam "t" (.app (.var "P") (.const trueName)) <|
       typedLam "f" (.app (.var "P") (.const falseName)) (.var "f")
 
+def boolFamily : Term := boolFamilyNamed.compile ["b"]
 def boolBody : Term := boolBodyNamed.compile []
 def trueBody : Term := trueBodyNamed.compile []
 def falseBody : Term := falseBodyNamed.compile []
@@ -57,18 +61,21 @@ def constructorBodies : List RecursiveBody :=
    ⟨falseName, falseBody, falseBody_closed⟩]
 
 theorem bool_has_type : ChecksImplementation DefEnv.empty
-    (RecursiveSignature.context signatures)
+    (DefEnv.empty.extend typeBodies)
     (RecursiveSignature.contextWithout signatures (typeBodies.map (·.name)))
     boolName boolBody .star := by
-  apply ChecksImplementation.typeFormation
-  apply Checks.selfFormation
-  apply Checks.certified
-  apply ContextEquiv.starChecking
-  apply ContextEquiv.ofContextualStepsEq 1000
-  rfl
+  apply ChecksImplementation.recursiveTypeFormation
+  · rfl
+  · apply Checks.certified
+    apply ContextEquiv.starChecking
+    apply ContextEquiv.recursiveIdempotence
+    · rfl
+    · apply ContextEquiv.starChecking
+      apply ContextEquiv.ofContextualStepsEq 2000
+      rfl
 
 theorem true_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
-    (RecursiveSignature.context signatures)
+  ((DefEnv.empty.extend typeBodies).extend constructorBodies)
     (RecursiveSignature.contextWithout signatures
       (constructorBodies.map (·.name)))
     trueName trueBody (.const boolName) := by
@@ -79,7 +86,7 @@ theorem true_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
     rfl
 
 theorem false_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
-    (RecursiveSignature.context signatures)
+  ((DefEnv.empty.extend typeBodies).extend constructorBodies)
     (RecursiveSignature.contextWithout signatures
       (constructorBodies.map (·.name)))
     falseName falseBody (.const boolName) := by

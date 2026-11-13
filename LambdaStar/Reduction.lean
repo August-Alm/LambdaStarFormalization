@@ -25,9 +25,6 @@ mutual
     /-- A closure unfolds only when applied: `c u ↦ Δ(c) u`. -/
     | delta (defined : Δ.defs name = some body) :
       Step Δ stage (.app (.const name) argument) (.app body argument)
-    /-- `(ιx. T) t ↦ T{x := t} t`. -/
-    | selfInstantiation : Step Δ stage (.app (.iota body) argument)
-      (.app (body.instantiate argument) argument)
     /-- `* u (* u t) ↦ * u t`. -/
     | starredIdempotence :
         Step Δ stage
@@ -47,8 +44,6 @@ mutual
         Step Δ (stage + 1) (.app .star u) u
       | lam : Step Δ stage body body' →
         Step Δ stage (.lam body) (.lam body')
-      | iota : Step Δ stage body body' →
-        Step Δ stage (.iota body) (.iota body')
       | appLeft : Step Δ stage function function' →
         Step Δ stage (.app function argument) (.app function' argument)
       | appRight : Step Δ stage argument argument' →
@@ -127,11 +122,6 @@ mutual
         simpa [Term.substAt, hBody] using
           (Step.delta (Δ := Δ) (argument := Term.substAt depth replacement argument)
             defined)
-    | @Step.selfInstantiation _ _ body argument => by
-        simpa [Term.substAt, Term.substAt_instantiate] using
-          (Step.selfInstantiation (Δ := Δ)
-            (body := Term.substAt (depth + 1) replacement body)
-            (argument := Term.substAt depth replacement argument))
     | @Step.starredIdempotence _ _ u term => by
         simpa [Term.substAt] using
           (Step.starredIdempotence (Δ := Δ)
@@ -146,9 +136,6 @@ mutual
     | @Step.lam _ _ body body' reduction => by
         simpa [Term.substAt] using
           (Step.lam (Step.substAt reduction (depth + 1) replacement))
-    | @Step.iota _ _ body body' reduction => by
-        simpa [Term.substAt] using
-          (Step.iota (Step.substAt reduction (depth + 1) replacement))
     | @Step.appLeft _ _ function function' argument reduction => by
         simpa [Term.substAt] using
           (Step.appLeft
@@ -181,11 +168,9 @@ mutual
           ∃ body', result = .lam body' ∧ Steps Δ stage body body')
       (beta := by intros; trivial)
       (delta := by intros; trivial)
-      (selfInstantiation := by intros; trivial)
       (starredIdempotence := by intros; trivial)
       (starChecking := by intros; trivial)
       (lam := by intros; trivial)
-      (iota := by intros; trivial)
       (appLeft := by intros; trivial)
       (appRight := by intros; trivial)
       (refl := by
@@ -231,12 +216,10 @@ mutual
       Step Δ (stage + 1) term result
     | .beta => .beta
     | .delta defined => .delta defined
-    | .selfInstantiation => .selfInstantiation
     | .starredIdempotence => .starredIdempotence
     | .starChecking certificate =>
         .starChecking (Steps.monoSucc certificate)
     | .lam reduction => .lam (Step.monoSucc reduction)
-    | .iota reduction => .iota (Step.monoSucc reduction)
     | .appLeft reduction => .appLeft (Step.monoSucc reduction)
     | .appRight reduction => .appRight (Step.monoSucc reduction)
 
@@ -289,14 +272,8 @@ def computationalStep (Δ : DefEnv) (stage : Nat) :
       match computationalStep Δ stage body with
       | none => none
       | some ⟨body', reduction⟩ => some ⟨.lam body', .lam reduction⟩
-  | .iota body =>
-      match computationalStep Δ stage body with
-      | none => none
-      | some ⟨body', reduction⟩ => some ⟨.iota body', .iota reduction⟩
   | .app (.lam body) argument =>
       some ⟨body.instantiate argument, .beta⟩
-  | .app (.iota body) argument =>
-      some ⟨.app (body.instantiate argument) argument, .selfInstantiation⟩
   | .app .star .star =>
       if sufficient : 2 ≤ stage then
         have inner : Steps Δ 0
@@ -375,7 +352,6 @@ def Idempotent (Δ : DefEnv) (u : Term) : Prop :=
 inductive ReductionContext where
   | hole
   | lam : ReductionContext → ReductionContext
-  | iota : ReductionContext → ReductionContext
   | appLeft : ReductionContext → Term → ReductionContext
   | appRight : Term → ReductionContext → ReductionContext
 
@@ -384,7 +360,6 @@ namespace ReductionContext
 def fill : ReductionContext → Term → Term
   | .hole, term => term
   | .lam context, term => .lam (context.fill term)
-  | .iota context, term => .iota (context.fill term)
   | .appLeft context argument, term => .app (context.fill term) argument
   | .appRight function context, term => .app function (context.fill term)
 
@@ -392,7 +367,6 @@ def fill : ReductionContext → Term → Term
 def binders : ReductionContext → Nat
   | .hole => 0
   | .lam context => context.binders + 1
-  | .iota context => context.binders + 1
   | .appLeft context _ => context.binders
   | .appRight _ context => context.binders
 
@@ -400,7 +374,6 @@ def substAt (depth : Nat) (replacement : Term) :
     ReductionContext → ReductionContext
   | .hole => .hole
   | .lam context => .lam (context.substAt (depth + 1) replacement)
-  | .iota context => .iota (context.substAt (depth + 1) replacement)
   | .appLeft context argument =>
       .appLeft (context.substAt depth replacement)
         (Term.substAt depth replacement argument)
@@ -414,8 +387,6 @@ theorem substAt_binders (context : ReductionContext) :
   | hole => rfl
   | lam context inductionHypothesis =>
       simp [substAt, binders, inductionHypothesis]
-      | iota context inductionHypothesis =>
-        simp [substAt, binders, inductionHypothesis]
   | appLeft context argument inductionHypothesis =>
       simp [substAt, binders, inductionHypothesis]
   | appRight function context inductionHypothesis =>
@@ -429,10 +400,6 @@ theorem substAt_fill (context : ReductionContext) (term replacement : Term)
   induction context generalizing depth with
   | hole => simp [fill, substAt, binders]
   | lam context inductionHypothesis =>
-      simpa [fill, substAt, binders, Term.substAt, Nat.add_assoc,
-        Nat.add_comm, Nat.add_left_comm] using
-        inductionHypothesis (depth := depth + 1)
-  | iota context inductionHypothesis =>
       simpa [fill, substAt, binders, Term.substAt, Nat.add_assoc,
         Nat.add_comm, Nat.add_left_comm] using
         inductionHypothesis (depth := depth + 1)
@@ -450,7 +417,6 @@ theorem Step.inContext (context : ReductionContext)
   induction context with
   | hole => exact reduction
   | lam context inductionHypothesis => exact .lam inductionHypothesis
-  | iota context inductionHypothesis => exact .iota inductionHypothesis
   | appLeft context argument inductionHypothesis =>
     exact .appLeft inductionHypothesis
   | appRight function context inductionHypothesis =>

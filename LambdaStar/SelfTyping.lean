@@ -18,10 +18,7 @@ def bind (context : TypingContext) (type : Term) : TypingContext :=
 
 end TypingContext
 
-/--
-Equational reasoning under scoped typing assumptions. Unlike the abandoned
-cyclic judgment, this relation has no rule that assumes its own conclusion.
--/
+/-- Equational reasoning under scoped typing assumptions. -/
 inductive ContextEquiv (Δ : DefEnv) : TypingContext → Term → Term → Prop where
   | operational : Joinable Δ left right → ContextEquiv Δ context left right
   | assumption (membership : (left, right) ∈ context) :
@@ -32,8 +29,6 @@ inductive ContextEquiv (Δ : DefEnv) : TypingContext → Term → Term → Prop 
     ContextEquiv Δ context middle right → ContextEquiv Δ context left right
   | lam : ContextEquiv Δ (context.map TypingContext.shiftEquation) body body' →
     ContextEquiv Δ context (.lam body) (.lam body')
-  | iota : ContextEquiv Δ (context.map TypingContext.shiftEquation) body body' →
-    ContextEquiv Δ context (.iota body) (.iota body')
   | appLeft : ContextEquiv Δ context function function' →
     ContextEquiv Δ context (.app function argument) (.app function' argument)
   | appRight : ContextEquiv Δ context argument argument' →
@@ -46,10 +41,19 @@ inductive ContextEquiv (Δ : DefEnv) : TypingContext → Term → Term → Prop 
   | starChecking :
         ContextEquiv Δ context (idempotenceLhs term) (idempotenceRhs term) →
         ContextEquiv Δ context (.app .star term) term
-  | selfFormation
-      (formation : ContextEquiv Δ (context.bind (.iota body))
-        (.app .star body) body) :
-      ContextEquiv Δ context (.app .star (.iota body)) (.iota body)
+  /--
+  Guarded cyclic idempotence for a recursive closure. The recursive hypothesis
+  `x : A` is available only after the environment identifies `A` with a
+  self-indexed family, while checking that unfolded family.
+  -/
+  | recursiveIdempotence
+      (defined : Δ.defs name = some (Term.self family))
+      (guarded : ContextEquiv Δ
+        (TypingContext.bind
+          ((.app .star (.const name), .const name) :: context) (.const name))
+        (.app .star family) family) :
+      ContextEquiv Δ context
+        (idempotenceLhs (.const name)) (idempotenceRhs (.const name))
 
 namespace ContextEquiv
 
@@ -112,29 +116,12 @@ def contextualStep (Δ : DefEnv) (context : TypingContext) :
       | none => none
       | some ⟨body', proof⟩ =>
         some ⟨.lam body', ContextEquiv.lam (context := context) proof⟩
-  | .iota body =>
-    match assumptionStep Δ context (.iota body) with
-    | some step => some step
-    | none =>
-      match contextualStep Δ
-        (context.map TypingContext.shiftEquation) body with
-      | none => none
-      | some ⟨body', proof⟩ =>
-        some ⟨.iota body', ContextEquiv.iota (context := context) proof⟩
   | .app (.lam body) argument =>
     match assumptionStep Δ context (.app (.lam body) argument) with
     | some step => some step
       | none => some ⟨body.instantiate argument, by
         have reduction : Step Δ 0 (.app (.lam body) argument)
           (body.instantiate argument) := .beta
-        exact ofStep (context := context) reduction⟩
-  | .app (.iota body) argument =>
-    match assumptionStep Δ context (.app (.iota body) argument) with
-    | some step => some step
-    | none => some ⟨.app (body.instantiate argument) argument,
-        by
-        have reduction : Step Δ 0 (.app (.iota body) argument)
-          (.app (body.instantiate argument) argument) := .selfInstantiation
         exact ofStep (context := context) reduction⟩
   | Term.app Term.star Term.star =>
     match assumptionStep Δ context (.app .star .star) with
@@ -244,14 +231,7 @@ end ContextEquiv
 inductive Checks (Δ : DefEnv) : TypingContext → Term → Term → Prop where
   | certified (certificate : ContextEquiv Δ context (.app type term) term) :
     Checks Δ context term type
-  | selfGen (premise : Checks Δ context term (body.instantiate term)) :
-    Checks Δ context term (.iota body)
-  | selfInst (premise : Checks Δ context term (.iota body)) :
-    Checks Δ context term (body.instantiate term)
-  | selfFormation
-      (premise : Checks Δ (context.bind (.iota body)) body .star) :
-      Checks Δ context (.iota body) .star
-    | conversion
+  | conversion
       (premise : Checks Δ context term sourceType)
       (equality : ContextEquiv Δ context sourceType targetType) :
       Checks Δ context term targetType
@@ -260,19 +240,7 @@ inductive Checks (Δ : DefEnv) : TypingContext → Term → Term → Prop where
 theorem Checks.sound : Checks Δ context term type →
   ContextEquiv Δ context (.app type term) term
   | .certified certificate => certificate
-  | @Checks.selfGen _ _ term body premise => by
-      exact .trans
-        (ContextEquiv.ofStep
-          (Step.selfInstantiation (stage := 0) (body := body) (argument := term)))
-        premise.sound
-  | @Checks.selfInst _ _ term body premise => by
-      exact .trans
-        (.symm (ContextEquiv.ofStep
-          (Step.selfInstantiation (stage := 0) (body := body) (argument := term))))
-        premise.sound
-  | @Checks.selfFormation _ context body premise =>
-      .selfFormation premise.sound
-    | @Checks.conversion _ context term sourceType targetType premise equality => by
+  | @Checks.conversion _ context term sourceType targetType premise equality => by
       exact .trans (.appLeft (.symm equality)) premise.sound
 
 end LambdaStar
