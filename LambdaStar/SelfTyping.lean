@@ -42,16 +42,20 @@ inductive ContextEquiv (Δ : DefEnv) : TypingContext → Term → Term → Prop 
         ContextEquiv Δ context (idempotenceLhs term) (idempotenceRhs term) →
         ContextEquiv Δ context (.app .star term) term
   /--
-  Guarded cyclic idempotence for a recursive closure. The recursive hypothesis
-  `x : A` is available only after the environment identifies `A` with a
-  self-indexed family, while checking that unfolded family.
+  Guarded cyclic idempotence for an arbitrary recursive environment entry.
+  Recursive hypotheses are confined to comparing its one-step unfoldings.
   -/
-  | recursiveIdempotence
-      (defined : Δ.defs name = some (Term.self family))
+  | fixedPointInduction
+      (defined : Δ.defs name = some body)
+      (progress : body.RecursiveProgress name = true)
       (guarded : ContextEquiv Δ
         (TypingContext.bind
-          ((.app .star (.const name), .const name) :: context) (.const name))
-        (.app .star family) family) :
+          ((.app .star (.const name), .const name) ::
+            (idempotenceLhs (.const name), idempotenceRhs (.const name)) ::
+            context)
+          (.const name))
+        (.app (body.shift 1 0) (.app (.const name) (.bvar 0)))
+        (.app (body.shift 1 0) (.bvar 0))) :
       ContextEquiv Δ context
         (idempotenceLhs (.const name)) (idempotenceRhs (.const name))
 
@@ -61,6 +65,22 @@ namespace ContextEquiv
 theorem ofStep (reduction : Step Δ stage left right) :
   ContextEquiv Δ context left right :=
   .operational ⟨right, ⟨stage, .single reduction⟩, ⟨0, .refl⟩⟩
+
+/-- Idempotence of a structurally progressing recursive environment entry. -/
+theorem recursiveIdempotence
+    (defined : Δ.defs name = some body)
+    (progress : body.RecursiveProgress name = true)
+    (guarded : ContextEquiv Δ
+      (TypingContext.bind
+        ((.app .star (.const name), .const name) ::
+          (idempotenceLhs (.const name), idempotenceRhs (.const name)) ::
+          context)
+        (.const name))
+      (.app (body.shift 1 0) (.app (.const name) (.bvar 0)))
+      (.app (body.shift 1 0) (.bvar 0))) :
+    ContextEquiv Δ context
+      (idempotenceLhs (.const name)) (idempotenceRhs (.const name)) :=
+  .fixedPointInduction defined progress guarded
 
 /-- A scoped equation `* A ≃ A` makes `A` an idempotent projector. -/
 theorem idempotentOn

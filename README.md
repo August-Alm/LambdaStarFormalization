@@ -274,22 +274,32 @@ is no `μ` term. Operationally, the equation is exposed at an application head:
 A u ↦ Δ(A) u = S u
 ```
 
-Recursive type formation uses the following explicit contextual-equality axiom:
+Recursive type formation uses a specialized fixed-point induction axiom:
 
 ```text
-Δ(A) = λx. T x
-ΓA = (* A ≃ A) :: Γ
-Δ ; ΓA, x : A ⊢ * T ≃ T
--------------------------------- RecursiveIdempotence
+Δ(A) = S
+ProgressA(S)
+ΓA = (* A ≃ A) :: (Idempotent A) :: Γ
+Δ ; ΓA, x : A ⊢ S (A x) ≃ S x
+-------------------------------- FixedPointInduction
 Δ ; Γ ⊢ λy. A (A y) ≃ λy. A y
 ```
 
-The environment lookup is the guard: the recursive hypotheses `A : *` and
-`x : A` are available only while checking the unfolded family `T`, and do not
-enter the surrounding context. Star checking then derives `* A ≃ A` from the
-conclusion. This is an axiom of contextual equality, not a reduction rule; its
-soundness has not yet been derived from a fixed-point model or a general
-guarded-cycle theorem.
+The premise compares the one-step environment unfoldings of `A (A x)` and
+`A x`; it places no shape restriction on `S`. `ProgressA(S)` is an executable
+structural check over the body. Recursive occurrences must be applied. For a
+self-indexed body `λx. T x`, the checker inspects `T` relative to its self
+variable and rejects a recursive call directly on that variable. Thus the pure
+eta-cycle `Δ(A) = λx. A x` is rejected, while the Bool and Nat bodies pass.
+The environment lookup and progress witness guard access to `A : *`, the
+recursive idempotence hypothesis, and `x : A`; these assumptions exist only in
+the unfolded premise and do not enter the surrounding context.
+
+`ContextEquiv.recursiveIdempotence` is a theorem applying this axiom; star
+checking then derives `* A ≃ A`. `FixedPointInduction` is not a reduction rule.
+The structural predicate is a conservative syntactic approximation, not yet a
+semantic contractiveness theorem or a full cyclic-proof trace checker, so its
+soundness remains an explicit trust assumption.
 
 During a type phase, the phase bodies are installed in a provisional
 environment for this guarded check, while all current-phase signature equations
@@ -365,9 +375,10 @@ are proved without `sorry`. In particular, the validated declarations establish
 `Bool : *`, `true : Bool`, `false : Bool`, `Nat : *`, `zero : Nat`, and
 `succ : Nat → Nat`. The corresponding final theorems are
 `BoolTest.block_valid` and `NatTest.block_valid`. These results depend on the
-`RecursiveIdempotence` axiom above. Global normalization, a semantic soundness
-theorem for guarded cycles, and unconditional confluence remain separate
-metatheoretic questions.
+`FixedPointInduction` axiom above, through the derived
+`ContextEquiv.recursiveIdempotence` theorem. Global normalization, a semantic
+soundness theorem for guarded cycles, and unconditional confluence remain
+separate metatheoretic questions.
 
 Recursive validation excludes every name implemented in the current phase.
 This prevents a declaration such as `junk : Bool = junk` from certifying itself

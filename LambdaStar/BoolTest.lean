@@ -70,8 +70,8 @@ theorem bool_has_type : ChecksImplementation DefEnv.empty
     apply ContextEquiv.starChecking
     apply ContextEquiv.recursiveIdempotence
     · rfl
-    · apply ContextEquiv.starChecking
-      apply ContextEquiv.ofContextualStepsEq 2000
+    · native_decide
+    · apply ContextEquiv.ofContextualStepsEq 10000
       rfl
 
 theorem true_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)

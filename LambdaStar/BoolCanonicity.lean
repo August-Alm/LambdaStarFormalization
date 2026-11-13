@@ -12,6 +12,11 @@ def junkBody : RecursiveBody :=
 
 def junkBodies : List RecursiveBody := [junkBody]
 
+/-- The family of `A = λx. A x` makes no structural recursive progress. -/
+theorem etaRecursiveFamily_not_progressing :
+  Term.RecursiveProgress "A" (Term.self (.const "A")) = false := by
+  decide
+
 /--
 The historical unsafe context accepted a self-named implementation as Bool.
 This theorem records the exploit, but it cannot be used by `ChecksRecursivePhase`,
