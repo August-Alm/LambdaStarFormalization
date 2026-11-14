@@ -65,10 +65,6 @@ theorem closed_of_lookup
 
 end RecursiveBody
 
-def DefEnv.empty : DefEnv where
-  defs _ := none
-  closed _ _ defined := by cases defined
-
 /-- Extend an environment only with bodies validated in one completed phase. -/
 def DefEnv.extend (prior : DefEnv) (bodies : List RecursiveBody) : DefEnv where
   defs name := (RecursiveBody.lookup bodies name).orElse fun _ => prior.defs name
@@ -123,7 +119,8 @@ One validation phase. Checking excludes every signature implemented in this
 phase, preventing direct signature-based self-certification. Recursive type
 formation may unfold the provisional phase environment only through its
 guarded idempotence proof; value-producing cases unfold only `prior`. Phase
-bodies become generally operational after validation.
+bodies become locally available to later phases through index-consuming delta.
+Only a complete signature-covered block can be sealed as a `ValidatedEnv`.
 -/
 structure ChecksRecursivePhase
     (prior : DefEnv) (signatures : List RecursiveSignature)
@@ -163,6 +160,163 @@ structure ChecksRecursiveBlock
   validation : ChecksRecursivePhases signatures prior phases result
   signaturesCovered : ∀ signature ∈ signatures,
     signature.name ∈ implementedNames phases
+
+/--
+An environment is available at an observation depth only through validation
+history. Depth zero observes no definitions, the empty environment is valid at
+every depth, and each sealed complete block adds one observable layer.
+-/
+inductive EnvironmentSatisfiesAt : Nat → DefEnv → Prop where
+  | zero (environment : DefEnv) : EnvironmentSatisfiesAt 0 environment
+  | empty (depth : Nat) : EnvironmentSatisfiesAt depth DefEnv.empty
+  | sealed
+      (priorSatisfied : EnvironmentSatisfiesAt depth prior)
+      (block : ChecksRecursiveBlock signatures prior phases result) :
+      EnvironmentSatisfiesAt (depth + 1) result
+
+/-- An environment backed by validation history at every finite depth. -/
+def EnvironmentSatisfies (environment : DefEnv) : Prop :=
+  ∀ depth, EnvironmentSatisfiesAt depth environment
+
+namespace EnvironmentSatisfies
+
+theorem empty : EnvironmentSatisfies DefEnv.empty := by
+  intro depth
+  exact .empty depth
+
+/-- A complete checked block seals one new environment layer. -/
+theorem sealBlock
+    (priorSatisfied : EnvironmentSatisfies prior)
+    (block : ChecksRecursiveBlock signatures prior phases result) :
+    EnvironmentSatisfies result := by
+  intro depth
+  cases depth with
+  | zero => exact .zero result
+  | succ depth =>
+      exact EnvironmentSatisfiesAt.sealed (priorSatisfied depth) block
+
+end EnvironmentSatisfies
+
+/-- A raw environment together with its complete block-validation history. -/
+structure ValidatedEnv where
+  raw : DefEnv
+  satisfies : EnvironmentSatisfies raw
+
+namespace ValidatedEnv
+
+def empty : ValidatedEnv where
+  raw := DefEnv.empty
+  satisfies := EnvironmentSatisfies.empty
+
+/-- Extend a validated environment only by sealing a complete checked block. -/
+def sealBlock (prior : ValidatedEnv)
+    (block : ChecksRecursiveBlock signatures prior.raw phases result) :
+    ValidatedEnv where
+  raw := result
+  satisfies := EnvironmentSatisfies.sealBlock prior.satisfies block
+
+end ValidatedEnv
+
+/-
+Ordinary finite evaluation is recovered at every base depth by supplying the
+derivation's finite unfolding cost. In particular, delta consumes one depth;
+there is deliberately no unrestricted same-world delta theorem.
+-/
+mutual
+  theorem legacyStep_to_guarded
+      (satisfied : EnvironmentSatisfies environment)
+      (reduction : Step environment stage left right) :
+      ∃ cost, ∀ baseDepth,
+        GuardedStep environment environment (cost + baseDepth) baseDepth []
+          left right :=
+    match reduction with
+    | .beta =>
+        ⟨0, fun baseDepth => by
+          simpa using
+            (GuardedStep.legacy (prior := environment) (formation := environment)
+              (depth := baseDepth)
+              (Step.beta (Δ := DefEnv.empty) (stage := stage)))⟩
+    | .delta defined =>
+        ⟨1, fun baseDepth => by
+          simpa [Nat.add_comm] using
+            (GuardedStep.delta (formation := environment) (depth := baseDepth)
+              defined)⟩
+    | .starredIdempotence =>
+        ⟨0, fun baseDepth => by
+          simpa using
+            (GuardedStep.legacy (prior := environment) (formation := environment)
+              (depth := baseDepth)
+              (Step.starredIdempotence (Δ := DefEnv.empty) (stage := stage)))⟩
+    | .starChecking certificate => by
+        obtain ⟨cost, translated⟩ :=
+          legacySteps_to_guarded satisfied certificate
+        exact ⟨cost, fun baseDepth => .starChecking (translated baseDepth)⟩
+    | .lam reduction => by
+        obtain ⟨cost, translated⟩ :=
+          legacyStep_to_guarded satisfied reduction
+        exact ⟨cost, fun baseDepth => .lam (translated baseDepth)⟩
+    | .appLeft reduction => by
+        obtain ⟨cost, translated⟩ :=
+          legacyStep_to_guarded satisfied reduction
+        exact ⟨cost, fun baseDepth => .appLeft (translated baseDepth)⟩
+    | .appRight reduction => by
+        obtain ⟨cost, translated⟩ :=
+          legacyStep_to_guarded satisfied reduction
+        exact ⟨cost, fun baseDepth => .appRight (translated baseDepth)⟩
+
+  theorem legacySteps_to_guarded
+      (satisfied : EnvironmentSatisfies environment)
+      (reduction : Steps environment stage left right) :
+      ∃ cost, ∀ baseDepth,
+        GuardedSteps environment environment (cost + baseDepth) baseDepth []
+          left right :=
+    match reduction with
+    | .refl => ⟨0, fun baseDepth => by simpa using GuardedSteps.refl⟩
+    | .tail head tail => by
+        obtain ⟨headCost, translatedHead⟩ :=
+          legacyStep_to_guarded satisfied head
+        obtain ⟨tailCost, translatedTail⟩ :=
+          legacySteps_to_guarded satisfied tail
+        exact ⟨headCost + tailCost, fun baseDepth => by
+          simpa [Nat.add_assoc] using
+            GuardedSteps.tail (translatedHead (tailCost + baseDepth))
+              (translatedTail baseDepth)⟩
+end
+
+/-- Sealed finite evaluation has a guarded realization at every base depth. -/
+theorem sealed_steps_sound (validated : ValidatedEnv)
+    (reduction : Steps validated.raw stage left right) :
+    ∃ cost, ∀ baseDepth,
+      GuardedSteps validated.raw validated.raw (cost + baseDepth) baseDepth []
+        left right :=
+  legacySteps_to_guarded validated.satisfies reduction
+
+/-- A uniformly costed guarded reduction is observable at every requested depth. -/
+theorem costed_guarded_steps_equiv
+    (reduction : ∃ cost, ∀ baseDepth,
+      GuardedSteps environment environment (cost + baseDepth) baseDepth []
+        left right) :
+    ∀ depth, ContextEquiv environment environment depth [] left right := by
+  obtain ⟨cost, reduction⟩ := reduction
+  intro depth
+  by_cases enough : cost ≤ depth
+  · let baseDepth := depth - cost
+    have sourceDepth : cost + baseDepth = depth := by
+      simp [baseDepth, Nat.add_sub_of_le enough]
+    apply ContextEquiv.operational
+    refine ⟨baseDepth, right, ?_, ?_⟩
+    · exact sourceDepth ▸ reduction baseDepth
+    · exact sourceDepth ▸ GuardedSteps.spend cost baseDepth
+  · apply ContextEquiv.operational
+    refine ⟨0, right, ?_, GuardedSteps.spend depth 0⟩
+    exact GuardedSteps.trans (GuardedSteps.spend depth 0)
+      (GuardedSteps.single GuardedStep.zero)
+
+/-- Every legacy reduction in a validated environment is equivalent at every depth. -/
+theorem sealed_steps_equiv (validated : ValidatedEnv)
+    (reduction : Steps validated.raw stage left right) :
+    ∀ depth, ContextEquiv validated.raw validated.raw depth [] left right :=
+  costed_guarded_steps_equiv (sealed_steps_sound validated reduction)
 
 /-- A validated declaration has its signature without unfolding its own body. -/
 theorem ChecksRecursivePhase.hasType

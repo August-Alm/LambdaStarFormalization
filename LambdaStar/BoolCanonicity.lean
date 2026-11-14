@@ -27,56 +27,17 @@ theorem etaRecursiveFamily_guarded :
       (idempotenceLhs (.const etaName))
       (idempotenceRhs (.const etaName)) := by
   intro depth
-  apply ContextEquiv.ofGuardedStep
-  apply GuardedStep.recursiveIdempotenceAt
-  · rfl
-  · intro guardedDepth
-    apply ContextEquiv.contextualStepsTo guardedDepth 100
-    rfl
-
-/--
-The historical unsafe context accepted a self-named implementation as Bool.
-This theorem records the exploit, but it cannot be used by `ChecksRecursivePhase`,
-whose realization context excludes all names implemented in that phase.
--/
-theorem unsafe_junk_has_type : ChecksImplementation
-  (DefEnv.empty.extend BoolTest.typeBodies)
-  (DefEnv.empty.extend BoolTest.typeBodies)
-    (RecursiveSignature.context signatures)
-    junkName (.const junkName) (.const BoolTest.boolName) := by
-  apply ChecksImplementation.namedSelf
-  · rfl
-  · apply Checks.certified
-    intro depth
-    have deltaReduction : Step (DefEnv.empty.extend BoolTest.typeBodies) 0
-        (.app (.const BoolTest.boolName) (.const junkName))
-        (.app BoolTest.boolBody (.const junkName)) := .delta (by rfl)
-    have selfReduction : Step (DefEnv.empty.extend BoolTest.typeBodies) 0
-        (.app BoolTest.boolBody (.const junkName))
-        (.app
-          (BoolTest.boolFamily.instantiate (.const junkName))
-          (.const junkName)) := by
-      change Step (DefEnv.empty.extend BoolTest.typeBodies) 0
-        (.app (Term.self BoolTest.boolFamily) (.const junkName))
-        (.app
-          (BoolTest.boolFamily.instantiate (.const junkName))
-          (.const junkName))
-      exact Step.beta
-    have signatureAssumption : ContextEquiv
-        (DefEnv.empty.extend BoolTest.typeBodies)
-      (DefEnv.empty.extend BoolTest.typeBodies)
-      depth
-        (RecursiveSignature.context signatures)
-        (.app (.const BoolTest.boolName) (.const junkName))
-        (.const junkName) := by
-      apply ContextEquiv.ofGuardedStep
-      apply GuardedStep.assumption
-      simp [signatures, RecursiveSignature.context, BoolTest.signatures]
-    exact .trans
-      (.symm (.trans
-        (ContextEquiv.ofStep deltaReduction)
-        (ContextEquiv.ofStep selfReduction)))
-      signatureAssumption
+  cases depth with
+  | zero => exact ContextEquiv.zero
+  | succ guardedDepth =>
+    apply ContextEquiv.ofGuardedStep
+    apply GuardedStep.recursiveIdempotenceAt
+    · rfl
+    · cases guardedDepth with
+      | zero =>
+        apply ContextEquiv.contextualStepsTo 0 0 100 <;> rfl
+      | succ depth =>
+        apply ContextEquiv.contextualStepsTo (depth + 1) (depth + 1) 100 <;> rfl
 
 /-- The exact equation used by the exploit is absent during realization. -/
 theorem junk_signature_excluded :

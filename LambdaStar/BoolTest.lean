@@ -7,7 +7,7 @@ open LambdaStar
 open NamedTerm
 
 set_option maxRecDepth 10000
-set_option maxHeartbeats 2000000
+set_option maxHeartbeats 10000000
 
 def boolName : Const := "Bool"
 def trueName : Const := "true"
@@ -68,13 +68,19 @@ theorem bool_has_type : ChecksImplementation DefEnv.empty
   · rfl
   · apply Checks.certified
     intro depth
-    apply ContextEquiv.starChecking
-    apply GuardedSteps.single
-    apply GuardedStep.recursiveIdempotenceAt
-    · rfl
-    · intro guardedDepth
-      apply ContextEquiv.contextualStepsTo guardedDepth 10000
-      rfl
+    cases depth with
+    | zero => exact ContextEquiv.zero
+    | succ guardedDepth =>
+      apply ContextEquiv.starChecking
+      apply GuardedSteps.single
+      apply GuardedStep.recursiveIdempotenceAt
+      · rfl
+      · cases guardedDepth with
+        | zero =>
+          apply ContextEquiv.contextualStepsTo 0 0 10000 <;> rfl
+        | succ depth =>
+          apply ContextEquiv.contextualStepsTo (depth + 1) (depth + 1) 10000 <;>
+            rfl
 
 theorem true_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   ((DefEnv.empty.extend typeBodies).extend constructorBodies)
@@ -85,8 +91,11 @@ theorem true_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   · rfl
   · apply Checks.certified
     intro depth
-    apply ContextEquiv.ofContextualStepsEq depth 500
-    rfl
+    cases depth with
+    | zero => exact ContextEquiv.zero
+    | succ depth =>
+      apply ContextEquiv.ofContextualStepsEqWithStrategy (depth + 1) 500 false
+      rfl
 
 theorem false_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   ((DefEnv.empty.extend typeBodies).extend constructorBodies)
@@ -97,8 +106,11 @@ theorem false_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   · rfl
   · apply Checks.certified
     intro depth
-    apply ContextEquiv.ofContextualStepsEq depth 500
-    rfl
+    cases depth with
+    | zero => exact ContextEquiv.zero
+    | succ depth =>
+      apply ContextEquiv.ofContextualStepsEqWithStrategy (depth + 1) 500 false
+      rfl
 
 /-- Bool is validated before its body may be unfolded by constructor checks. -/
 abbrev TypePhaseCheck : Prop :=
@@ -138,5 +150,16 @@ theorem constructorPhase_valid : ConstructorPhaseCheck := by
 theorem block_valid : BlockCheck := by
   refine ⟨.cons typePhase_valid (.cons constructorPhase_valid .nil), ?_⟩
   native_decide
+
+/-- The complete Bool environment, sealed from its validated block. -/
+def validatedEnv : ValidatedEnv :=
+  ValidatedEnv.sealBlock ValidatedEnv.empty block_valid
+
+/-- One sealed Bool unfolding is contextually equivalent at every depth. -/
+theorem sealed_bool_delta_equiv (argument : Term) :
+    ∀ depth, ContextEquiv validatedEnv.raw validatedEnv.raw depth []
+      (.app (.const boolName) argument) (.app boolBody argument) := by
+  apply sealed_steps_equiv validatedEnv
+  exact Steps.single (Step.delta (stage := 0) (by rfl))
 
 end LambdaStar.BoolTest

@@ -35,9 +35,10 @@ Validation is phased:
   Bool signature equation is absent.
 2. Expose only the validated Bool body.
 3. Validate each constructor body against the Bool family instantiated with its
-  stable name: `T[true/b]` or `T[false/b]`.
+  stable name: `T[true/b]` or `T[false/b]`. Unfolding the earlier Bool body
+  consumes one observation depth.
 4. Expose the complete environment only after both phases succeed and every
-  signature has an implementation.
+  signature has an implementation, sealing it as a `ValidatedEnv`.
 
 Bare closure names never unfold. Thus `true : Bool` cannot be established by
 unfolding `true`, and the implementation lambda is never substituted for the

@@ -314,4 +314,8 @@ structure DefEnv where
   defs : Const → Option Term
   closed : ∀ name body, defs name = some body → body.Closed
 
+def DefEnv.empty : DefEnv where
+  defs _ := none
+  closed _ _ defined := by cases defined
+
 end LambdaStar

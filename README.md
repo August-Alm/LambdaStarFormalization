@@ -86,7 +86,7 @@ _star-checking_
 (* u) ↦ u
 ```
 if λx.(u (u x)) reduces in finitely many steps to λx.(u x).
-In other words, if u is idempotent, then (∗ u) reduces to u.
+In other words, if u is idempotent, then (* u) reduces to u.
 
 We remark that the reduction rules are non-deterministic, which is to say that
 we do not impose any reduction order. We shall write ≃ for the induced equivalence relation. Note that we are not imposing any η-equivalence.
@@ -95,6 +95,22 @@ It follows from the starred-idempotence rule that λx.(* u (* u x)) reduces
 to λx.(* u x). The star-checking rule then implies (* (* u)) ↦ (* u). Hence
 λx.(* (* x)) reduces to λx.(* x). Again applying the star-checking rule, we
 deduce (* *) ↦ *.
+
+### Categorical semantics
+
+Assume we have a cartesian closed category C which has an object U and
+morphisms i : U
+U → U and j : U → U^U,
+such that j ◦ i is the identity;
+i.e., the mapping space object U^U
+is a retract of U. As discussed above, this gives an
+interpretation of the untyped lambda calculus, where j is modeled by η-
+expansion t ↦ λx.(t x) and i is the inclusion of lambda terms into all terms.
+Write φ for the isomorphism of morphism-sets φ : C(I, U^U) → C(U, U),
+where I is the initial object. To extend the interpretation to the lambda-star
+calculus, we ought to have an * : I → U, such that for all u : I → U the
+following equations hold. Firstly, φ(j ◦ φ(j ◦ *) ◦ u) : U → U is idempotent.
+Secondly, if φ(j ◦ u) is idempotent, then φ(j ◦ *) ◦ u = u.
 
 ### Operational semantics for type systems
 
@@ -231,9 +247,20 @@ earlier stage.
 
 Typing uses a second, contextual operational relation, `GuardedStep`. It embeds
 the staged reductions above, adds directed scoped assumptions, and is indexed
-by recursive observation depth. Its reflexive-transitive closure is
-`GuardedSteps`. Reduction is downward closed: a step visible at depth `n + 1`
-is also visible at depth `n`.
+by source and remaining recursive observation depth. Its reflexive-transitive
+closure, `GuardedSteps`, threads the remaining depth into the next step.
+Environment-free computation preserves depth, while unfolding a validated
+closure consumes one observation:
+
+```text
+Δprior(A) = S
+-------------------------------- Delta
+Δprior ; Δform ; Γ ⊢ₙ₊₁ A u ↦gₙ S u
+```
+
+An explicit `later` step may discard one observation without changing the
+term. There is no same-depth recursive delta rule and no embedding of an
+environment-dependent `Step` as a zero-cost guarded step.
 
 
 ### Self-indexed projectors
@@ -294,9 +321,9 @@ available. At a successor depth, recursive idempotence is itself a reduction:
 ```text
 Δform(A) = S
 ΓA = (* A ≃ A) :: (Idempotent A) :: Γ
-Δprior ; Δform ; ΓA, x : A ⊢ₙ S (A x) ↦g* S x
+Δprior ; Δform ; ΓA, x : A ⊢ₙ→ₘ S (A x) ↦g* S x
 -------------------------------------------------- RecursiveIdempotence
-Δprior ; Δform ; Γ ⊢ₙ₊₁
+Δprior ; Δform ; Γ ⊢ₙ₊₁→ₘ₊₁
   λy. A (A y) ↦g λy. A y
 ```
 
@@ -305,13 +332,13 @@ Here `↦g*` is directed `GuardedSteps`, not logical equality. The equations
 world and do not enter the surrounding context. There is no shape restriction
 on `S`.
 
-Guarded star checking consumes the resulting operational certificate at the
-same observation depth:
+Guarded star checking preserves the source and remaining depths of its
+operational certificate:
 
 ```text
-Δprior ; Δform ; Γ ⊢ₙ λy. A (A y) ↦g* λy. A y
+Δprior ; Δform ; Γ ⊢ₙ→ₘ λy. A (A y) ↦g* λy. A y
 ------------------------------------------------ StarChecking
-Δprior ; Δform ; Γ ⊢ₙ * A ↦g A
+Δprior ; Δform ; Γ ⊢ₙ→ₘ * A ↦g A
 ```
 
 Recursive idempotence therefore exists first as a directed reduction and only
@@ -319,15 +346,50 @@ then induces `* A ≃ A` through guarded joinability. The recursion depth remain
 independent of the certification stage carried by embedded closed `Step`
 derivations.
 
-Ordinary computation in this judgment can unfold only `Δprior`. In particular,
-it cannot use the provisional equation for `A` to turn the guarded premise
-back into its conclusion at the same depth. `Δform` is consulted only by
-`RecursiveIdempotence`, which necessarily moves from `n` to `n + 1`.
+Ordinary computation in this judgment can unfold only `Δprior`, spending one
+observation each time. It cannot use the provisional equation for `A` to turn
+the guarded premise back into its conclusion. `Δform` is consulted only by
+`RecursiveIdempotence`, which adds one observation to both ends of its body
+certificate.
 
 During a type phase, the phase bodies are installed in `Δform`, while
-`Δprior` contains only earlier validated phases and all current-phase signature
-equations remain excluded. Value-producing definitions use the same validated
-environment for both parameters.
+`Δprior` contains only earlier checked phases and all current-phase signature
+equations remain excluded. Later phases may use earlier bodies through the
+index-consuming delta rule. Individual phases are not exported as globally
+validated environments.
+
+Indexed environment satisfaction retains complete validation history:
+
+```text
+EnvironmentSatisfiesAt 0 Δ
+EnvironmentSatisfiesAt n ∅
+
+EnvironmentSatisfiesAt n Δprior
+ChecksRecursiveBlock signatures Δprior phases Δresult
+------------------------------------------------------ SealBlock
+EnvironmentSatisfiesAt (n + 1) Δresult
+```
+
+`ValidatedEnv` packages a raw environment with satisfaction at every finite
+depth. It starts from the empty environment and can be extended only by sealing
+a complete, signature-covered block. Bool and Nat expose `validatedEnv` values
+only after both phases succeed.
+
+Finite legacy evaluation over a sealed environment is operationally adequate.
+Every derivation has a finite unfolding cost `k` such that, for every base
+depth `n`, it translates to:
+
+```text
+Δ ; Δ ; [] ⊢ₖ₊ₙ t ↦g*ₙ u
+```
+
+Delta contributes one to `k`; beta and starred idempotence contribute zero;
+star checking recursively includes the cost of its certificate. Spending the
+same budget on the other side, or truncating at world zero when the requested
+world is shallower than `k`, proves `sealed_steps_equiv`: every finite `Steps`
+derivation in a `ValidatedEnv` induces `ContextEquiv` at every observation
+depth. This recovers unrestricted finite evaluation globally without a
+same-world recursive delta rule.
 
 The eta-recursive body `A = λx. A x` is guarded in this proof theory: at each
 successor world its recursive use is interpreted at the predecessor world. It
@@ -392,8 +454,8 @@ rec {
 - `SelfTyping.lean`: directed guarded reduction, its generated projector
   equality, proof-producing contextual normalization, and all-depth typing
   soundness.
-- `Recursive.lean`: recursive signatures, closure-aware implementation checks,
-  and phased body validation.
+- `Recursive.lean`: recursive signatures, phased body validation, indexed
+  environment satisfaction, sealing, and finite-cost operational adequacy.
 - `BoolTest.lean` and `NatTest.lean`: annotated recursive declarations.
 - `BoolCanonicity.lean`: regression proofs for the self-certifying Bool
   declaration that the phase realization context now excludes.
@@ -405,18 +467,20 @@ are proved without `sorry`. In particular, the validated declarations establish
 `Bool : *`, `true : Bool`, `false : Bool`, `Nat : *`, `zero : Nat`, and
 `succ : Nat → Nat`. The corresponding final theorems are
 `BoolTest.block_valid` and `NatTest.block_valid`. These results use directed
-guarded reductions for recursive idempotence and star checking. Adequacy with respect to an external observational model,
-global normalization, productivity, and unconditional confluence remain
-separate metatheoretic questions.
+guarded reductions for recursive idempotence and star checking. Internal
+adequacy of sealed finite reduction is `sealed_steps_equiv`; adequacy with
+respect to an external observational model, global normalization, productivity,
+and unconditional confluence remain separate metatheoretic questions.
 
 Recursive validation excludes every name implemented in the current phase.
 This prevents a declaration such as `junk : Bool = junk` from certifying itself
 with its own signature, and also blocks same-phase mutual self-certification.
-`BoolCanonicity.unsafe_junk_has_type` records the old derivation under an
-explicitly unsafe context; `junk_signature_excluded` proves that its crucial
-equation is absent from the actual phase realization context. A full theorem
-that every closed Bool inhabitant is equivalent to `true` or `false` remains to
-be proved.
+`BoolCanonicity.junk_signature_excluded` proves that the exploit's crucial
+equation is absent from the actual phase realization context. The former unsafe
+derivation is no longer expressible because guarded equality cannot import
+environment-dependent delta as a zero-cost legacy step. A full theorem that
+every closed Bool inhabitant is equivalent to `true` or `false` remains to be
+proved.
 
 ```sh
 lake build

@@ -76,13 +76,19 @@ theorem nat_has_type : ChecksImplementation DefEnv.empty
   · rfl
   · apply Checks.certified
     intro depth
-    apply ContextEquiv.starChecking
-    apply GuardedSteps.single
-    apply GuardedStep.recursiveIdempotenceAt
-    · rfl
-    · intro guardedDepth
-      apply ContextEquiv.contextualStepsTo guardedDepth 20000
-      rfl
+    cases depth with
+    | zero => exact ContextEquiv.zero
+    | succ guardedDepth =>
+      apply ContextEquiv.starChecking
+      apply GuardedSteps.single
+      apply GuardedStep.recursiveIdempotenceAt
+      · rfl
+      · cases guardedDepth with
+        | zero =>
+          apply ContextEquiv.contextualStepsTo 0 0 20000 <;> rfl
+        | succ depth =>
+          apply ContextEquiv.contextualStepsTo (depth + 1) (depth + 1) 20000 <;>
+            rfl
 
 theorem zero_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   ((DefEnv.empty.extend typeBodies).extend constructorBodies)
@@ -93,8 +99,11 @@ theorem zero_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   · rfl
   · apply Checks.certified
     intro depth
-    apply ContextEquiv.ofContextualStepsEq depth 1000
-    rfl
+    cases depth with
+    | zero => exact ContextEquiv.zero
+    | succ depth =>
+      apply ContextEquiv.ofContextualStepsEqWithStrategy (depth + 1) 1000 false
+      rfl
 
 theorem succ_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   ((DefEnv.empty.extend typeBodies).extend constructorBodies)
@@ -105,8 +114,11 @@ theorem succ_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   · rfl
   · apply Checks.certified
     intro depth
-    apply ContextEquiv.ofContextualStepsEq depth 2000
-    rfl
+    cases depth with
+    | zero => exact ContextEquiv.zero
+    | succ depth =>
+      apply ContextEquiv.ofContextualStepsEqWithStrategy (depth + 1) 2000 false
+      rfl
 
 abbrev TypePhaseCheck : Prop :=
   ChecksRecursivePhase DefEnv.empty signatures typeBodies
@@ -144,5 +156,9 @@ theorem constructorPhase_valid : ConstructorPhaseCheck := by
 theorem block_valid : BlockCheck := by
   refine ⟨.cons typePhase_valid (.cons constructorPhase_valid .nil), ?_⟩
   native_decide
+
+/-- The complete Nat environment, sealed from its validated block. -/
+def validatedEnv : ValidatedEnv :=
+  ValidatedEnv.sealBlock ValidatedEnv.empty block_valid
 
 end LambdaStar.NatTest
