@@ -98,19 +98,17 @@ deduce (* *) ↦ *.
 
 ### Categorical semantics
 
-Assume we have a cartesian closed category C which has an object U and
-morphisms i : U
-U → U and j : U → U^U,
-such that j ◦ i is the identity;
-i.e., the mapping space object U^U
-is a retract of U. As discussed above, this gives an
-interpretation of the untyped lambda calculus, where j is modeled by η-
-expansion t ↦ λx.(t x) and i is the inclusion of lambda terms into all terms.
-Write φ for the isomorphism of morphism-sets φ : C(I, U^U) → C(U, U),
-where I is the initial object. To extend the interpretation to the lambda-star
-calculus, we ought to have an * : I → U, such that for all u : I → U the
-following equations hold. Firstly, φ(j ◦ φ(j ◦ *) ◦ u) : U → U is idempotent.
-Secondly, if φ(j ◦ u) is idempotent, then φ(j ◦ *) ◦ u = u.
+As a sketch, begin with a cartesian closed category C, its terminal object
+I, and a reflexive object U: maps i : U^U → U and j : U → U^U with
+j ◦ i = id. This is the usual setting for interpreting the untyped lambda
+calculus. By exponential adjunction, every global element u : I → U
+determines an endomorphism decode(u) : U → U by transposing j ◦ u.
+
+An interpretation of * is a global element star : I → U. Write
+σ = decode(star), so that σ ◦ u interprets (* u). The two additional
+requirements are that decode(σ ◦ u) is idempotent for every u, and that
+σ ◦ u = u whenever decode(u) is idempotent. These are the categorical
+counterparts of starred idempotence and star checking.
 
 ### Operational semantics for type systems
 
