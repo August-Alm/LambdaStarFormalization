@@ -75,11 +75,13 @@ theorem nat_has_type : ChecksImplementation DefEnv.empty
   apply ChecksImplementation.recursiveTypeFormation
   · rfl
   · apply Checks.certified
+    intro depth
     apply ContextEquiv.starChecking
-    apply ContextEquiv.recursiveIdempotence
+    apply GuardedSteps.single
+    apply GuardedStep.recursiveIdempotenceAt
     · rfl
-    · native_decide
-    · apply ContextEquiv.ofContextualStepsEq 20000
+    · intro guardedDepth
+      apply ContextEquiv.contextualStepsTo guardedDepth 20000
       rfl
 
 theorem zero_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
@@ -90,7 +92,8 @@ theorem zero_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   apply ChecksImplementation.namedSelf
   · rfl
   · apply Checks.certified
-    apply ContextEquiv.ofContextualStepsEq 1000
+    intro depth
+    apply ContextEquiv.ofContextualStepsEq depth 1000
     rfl
 
 theorem succ_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
@@ -101,7 +104,8 @@ theorem succ_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   apply ChecksImplementation.namedSelfFunction
   · rfl
   · apply Checks.certified
-    apply ContextEquiv.ofContextualStepsEq 2000
+    intro depth
+    apply ContextEquiv.ofContextualStepsEq depth 2000
     rfl
 
 abbrev TypePhaseCheck : Prop :=
@@ -137,7 +141,8 @@ theorem constructorPhase_valid : ConstructorPhaseCheck := by
     · exact ⟨.const natName, rfl, zero_has_type⟩
     · exact ⟨Term.arrow (.const natName) (.const natName), rfl, succ_has_type⟩
 
-theorem block_valid : BlockCheck :=
-  .cons typePhase_valid (.cons constructorPhase_valid .nil)
+theorem block_valid : BlockCheck := by
+  refine ⟨.cons typePhase_valid (.cons constructorPhase_valid .nil), ?_⟩
+  native_decide
 
 end LambdaStar.NatTest

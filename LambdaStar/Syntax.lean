@@ -30,30 +30,6 @@ def shift (amount cutoff : Nat) : Term → Term
 def self (family : Term) : Term :=
   .lam (.app family (.bvar 0))
 
-/--
-Every recursive occurrence is applied to an argument other than the family’s
-self variable. The self index increases beneath lambdas.
--/
-def StructurallyProgressing (name : Const) (selfIndex : Nat) : Term → Bool
-  | .bvar _ => true
-  | .const constant => constant != name
-  | .lam body => StructurallyProgressing name (selfIndex + 1) body
-  | .app (.const constant) argument =>
-      if constant = name then
-        if argument = .bvar selfIndex then false
-        else StructurallyProgressing name selfIndex argument
-      else
-        StructurallyProgressing name selfIndex argument
-  | .app function argument =>
-      StructurallyProgressing name selfIndex function &&
-        StructurallyProgressing name selfIndex argument
-  | .star => true
-
-/-- Structural progress for an arbitrary recursive environment body. -/
-def RecursiveProgress (name : Const) : Term → Bool
-  | .lam (.app family (.bvar 0)) => family.StructurallyProgressing name 0
-  | body => body.StructurallyProgressing name 0
-
 /-- `[A → B] = λf. λx. B (f (A x))`. -/
 def arrow (domain codomain : Term) : Term :=
   .lam (.lam (.app (codomain.shift 2 0)

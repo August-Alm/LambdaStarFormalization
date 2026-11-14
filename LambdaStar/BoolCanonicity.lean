@@ -12,10 +12,27 @@ def junkBody : RecursiveBody :=
 
 def junkBodies : List RecursiveBody := [junkBody]
 
-/-- The family of `A = λx. A x` makes no structural recursive progress. -/
-theorem etaRecursiveFamily_not_progressing :
-  Term.RecursiveProgress "A" (Term.self (.const "A")) = false := by
-  decide
+def etaName : Const := "A"
+def etaBody : Term := Term.self (.const etaName)
+def etaBodies : List RecursiveBody :=
+  [⟨etaName, etaBody, by decide⟩]
+def etaEnv : DefEnv := DefEnv.empty.extend etaBodies
+
+/--
+Eta recursion is guarded at every finite observation depth. This establishes
+idempotence safety, not productivity or the existence of a canonical value.
+-/
+theorem etaRecursiveFamily_guarded :
+    ∀ depth, ContextEquiv DefEnv.empty etaEnv depth []
+      (idempotenceLhs (.const etaName))
+      (idempotenceRhs (.const etaName)) := by
+  intro depth
+  apply ContextEquiv.ofGuardedStep
+  apply GuardedStep.recursiveIdempotenceAt
+  · rfl
+  · intro guardedDepth
+    apply ContextEquiv.contextualStepsTo guardedDepth 100
+    rfl
 
 /--
 The historical unsafe context accepted a self-named implementation as Bool.
@@ -30,6 +47,7 @@ theorem unsafe_junk_has_type : ChecksImplementation
   apply ChecksImplementation.namedSelf
   · rfl
   · apply Checks.certified
+    intro depth
     have deltaReduction : Step (DefEnv.empty.extend BoolTest.typeBodies) 0
         (.app (.const BoolTest.boolName) (.const junkName))
         (.app BoolTest.boolBody (.const junkName)) := .delta (by rfl)
@@ -46,10 +64,13 @@ theorem unsafe_junk_has_type : ChecksImplementation
       exact Step.beta
     have signatureAssumption : ContextEquiv
         (DefEnv.empty.extend BoolTest.typeBodies)
+      (DefEnv.empty.extend BoolTest.typeBodies)
+      depth
         (RecursiveSignature.context signatures)
         (.app (.const BoolTest.boolName) (.const junkName))
         (.const junkName) := by
-      apply ContextEquiv.assumption
+      apply ContextEquiv.ofGuardedStep
+      apply GuardedStep.assumption
       simp [signatures, RecursiveSignature.context, BoolTest.signatures]
     exact .trans
       (.symm (.trans

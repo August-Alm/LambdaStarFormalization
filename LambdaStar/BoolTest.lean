@@ -67,11 +67,13 @@ theorem bool_has_type : ChecksImplementation DefEnv.empty
   apply ChecksImplementation.recursiveTypeFormation
   · rfl
   · apply Checks.certified
+    intro depth
     apply ContextEquiv.starChecking
-    apply ContextEquiv.recursiveIdempotence
+    apply GuardedSteps.single
+    apply GuardedStep.recursiveIdempotenceAt
     · rfl
-    · native_decide
-    · apply ContextEquiv.ofContextualStepsEq 10000
+    · intro guardedDepth
+      apply ContextEquiv.contextualStepsTo guardedDepth 10000
       rfl
 
 theorem true_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
@@ -82,7 +84,8 @@ theorem true_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   apply ChecksImplementation.namedSelf
   · rfl
   · apply Checks.certified
-    apply ContextEquiv.ofContextualStepsEq 500
+    intro depth
+    apply ContextEquiv.ofContextualStepsEq depth 500
     rfl
 
 theorem false_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
@@ -93,7 +96,8 @@ theorem false_has_type : ChecksImplementation (DefEnv.empty.extend typeBodies)
   apply ChecksImplementation.namedSelf
   · rfl
   · apply Checks.certified
-    apply ContextEquiv.ofContextualStepsEq 500
+    intro depth
+    apply ContextEquiv.ofContextualStepsEq depth 500
     rfl
 
 /-- Bool is validated before its body may be unfolded by constructor checks. -/
@@ -131,7 +135,8 @@ theorem constructorPhase_valid : ConstructorPhaseCheck := by
     · exact ⟨.const boolName, rfl, true_has_type⟩
     · exact ⟨.const boolName, rfl, false_has_type⟩
 
-theorem block_valid : BlockCheck :=
-  .cons typePhase_valid (.cons constructorPhase_valid .nil)
+theorem block_valid : BlockCheck := by
+  refine ⟨.cons typePhase_valid (.cons constructorPhase_valid .nil), ?_⟩
+  native_decide
 
 end LambdaStar.BoolTest

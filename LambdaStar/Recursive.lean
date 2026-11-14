@@ -92,25 +92,25 @@ against `T[k/x]`, preserving `k` as the index instead of substituting its body.
 inductive ChecksImplementation
     (prior formation : DefEnv) (context : TypingContext)
     (name : Const) : Term → Term → Prop where
-  | typeFormation (check : Checks prior context body .star) :
+  | typeFormation (check : Checks prior prior context body .star) :
       ChecksImplementation prior formation context
         name body .star
   | recursiveTypeFormation
       (defined : formation.defs name = some body)
-      (check : Checks formation context (.const name) .star) :
+      (check : Checks prior formation context (.const name) .star) :
       ChecksImplementation prior formation context name body .star
-  | direct (check : Checks prior context body type) :
+  | direct (check : Checks prior prior context body type) :
       ChecksImplementation prior formation context
         name body type
   | namedSelf
       (defined : prior.defs typeName = some (Term.self selfBody))
-      (check : Checks prior context body
+      (check : Checks prior prior context body
         (selfBody.instantiate (.const name))) :
       ChecksImplementation prior formation context
         name body (.const typeName)
   | namedSelfFunction
       (defined : prior.defs typeName = some (Term.self selfBody))
-      (check : Checks prior (context.bind domain) functionBody
+      (check : Checks prior prior (context.bind domain) functionBody
         (selfBody.instantiate
           (.app (.const name)
             (.app (domain.shift 1 0) (.bvar 0))))) :
@@ -139,14 +139,30 @@ structure ChecksRecursivePhase
         definition.name definition.body type
 
 /-- A sequence of phases, each exposing only previously validated bodies. -/
-inductive ChecksRecursiveBlock
+inductive ChecksRecursivePhases
     (signatures : List RecursiveSignature) :
     DefEnv → List (List RecursiveBody) → DefEnv → Prop where
-  | nil : ChecksRecursiveBlock signatures environment [] environment
+  | nil : ChecksRecursivePhases signatures environment [] environment
   | cons
       (phase : ChecksRecursivePhase prior signatures bodies)
-      (rest : ChecksRecursiveBlock signatures (prior.extend bodies) phases result) :
-      ChecksRecursiveBlock signatures prior (bodies :: phases) result
+      (rest : ChecksRecursivePhases signatures (prior.extend bodies) phases result) :
+      ChecksRecursivePhases signatures prior (bodies :: phases) result
+
+/-- Names implemented across all phases of a recursive block. -/
+def implementedNames (phases : List (List RecursiveBody)) : List Const :=
+  phases.flatMap fun bodies => bodies.map (·.name)
+
+/--
+A complete recursive block validates its phases and implements every declared
+signature. Phase declaration lookup already ensures that every body has a
+signature; freshness prevents implementing one name in multiple phases.
+-/
+structure ChecksRecursiveBlock
+    (signatures : List RecursiveSignature) (prior : DefEnv)
+    (phases : List (List RecursiveBody)) (result : DefEnv) : Prop where
+  validation : ChecksRecursivePhases signatures prior phases result
+  signaturesCovered : ∀ signature ∈ signatures,
+    signature.name ∈ implementedNames phases
 
 /-- A validated declaration has its signature without unfolding its own body. -/
 theorem ChecksRecursivePhase.hasType

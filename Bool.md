@@ -28,12 +28,16 @@ Church terms are only readable erasures.
 
 Validation is phased:
 
-1. Validate the Bool projector with `RecursiveIdempotence`, using its body in a
-  provisional environment but not its signature equation in the outer context.
+1. Validate the Bool projector at every observation depth with guarded
+  recursive idempotence, producing a directed reduction certificate. Its body
+  is available only through the provisional environment lookup from depth
+  `n + 1` to `n`; ordinary computation sees the prior environment, and the
+  Bool signature equation is absent.
 2. Expose only the validated Bool body.
 3. Validate each constructor body against the Bool family instantiated with its
   stable name: `T[true/b]` or `T[false/b]`.
-4. Expose the complete environment only after both phases succeed.
+4. Expose the complete environment only after both phases succeed and every
+  signature has an implementation.
 
 Bare closure names never unfold. Thus `true : Bool` cannot be established by
 unfolding `true`, and the implementation lambda is never substituted for the
