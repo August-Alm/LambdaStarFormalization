@@ -11,7 +11,7 @@ namespace TypingContext
 def shiftEquation (equation : Term × Term) : Term × Term :=
   (equation.1.shift 1 0, equation.2.shift 1 0)
 
-/-- Bind a fresh variable `u : type`, contributing `type u ≃ u`. -/
+/-- Bind a fresh variable `u : type`, contributing `(type u) ≃ u`. -/
 def bind (context : TypingContext) (type : Term) : TypingContext :=
   (.app (type.shift 1 0) (.bvar 0), .bvar 0) ::
     context.map shiftEquation

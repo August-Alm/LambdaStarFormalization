@@ -4,11 +4,11 @@ namespace LambdaStar
 
 open Term
 
-/-- `λx. u (u x)`, with the free variables of `u` shifted under `λ`. -/
+/-- `λx.(u (u x))`, with the free variables of `u` shifted under `λ`. -/
 def idempotenceLhs (u : Term) : Term :=
   .lam (.app (u.shift 1 0) (.app (u.shift 1 0) (.bvar 0)))
 
-/-- `λx. u x`, with the free variables of `u` shifted under `λ`. -/
+/-- `λx.(u x)`, with the free variables of `u` shifted under `λ`. -/
 def idempotenceRhs (u : Term) : Term :=
   .lam (.app (u.shift 1 0) (.bvar 0))
 
@@ -19,13 +19,13 @@ Stage `n + 1` may additionally use an idempotence derivation from stage `n`.
 -/
 mutual
   inductive Step (Δ : DefEnv) : Nat → Term → Term → Prop where
-    /-- `(λx. t) u ↦ t{x := u}`. -/
+    /-- `(λx.t u) ↦ t{x := u}`. -/
     | beta : Step Δ stage (.app (.lam body) argument)
         (body.instantiate argument)
-    /-- A closure unfolds only when applied: `c u ↦ Δ(c) u`. -/
+    /-- A closure unfolds only when applied: `(c u) ↦ (Δ(c) u)`. -/
     | delta (defined : Δ.defs name = some body) :
       Step Δ stage (.app (.const name) argument) (.app body argument)
-    /-- `* u (* u t) ↦ * u t`. -/
+    /-- `(* u (* u t)) ↦ (* u t)`. -/
     | starredIdempotence :
         Step Δ stage
           (.app (.app .star u) (.app (.app .star u) term))
@@ -35,7 +35,7 @@ mutual
 
         Δ ⊢ Idempotent u
         ─────────────────
-             * u ↦ u
+             (* u) ↦ u
 
     At stage `n + 1`, the certificate is a finite reduction at stage `n`.
     -/
@@ -81,13 +81,13 @@ theorem Steps.unfoldClosure (defined : Δ.defs name = some body) :
     Steps Δ stage (.app (.const name) argument) (.app body argument) :=
   .single (.delta defined)
 
-/-- Substitution transforms `λx. u (u x)` pointwise in `u`. -/
+/-- Substitution transforms `λx.(u (u x))` pointwise in `u`. -/
 theorem substAt_idempotenceLhs (u replacement : Term) (depth : Nat) :
     Term.substAt depth replacement (idempotenceLhs u) =
       idempotenceLhs (Term.substAt depth replacement u) := by
   simp [idempotenceLhs, Term.substAt, Term.substAt_shift_one]
 
-/-- Substitution transforms `λx. u x` pointwise in `u`. -/
+/-- Substitution transforms `λx.(u x)` pointwise in `u`. -/
 theorem substAt_idempotenceRhs (u replacement : Term) (depth : Nat) :
     Term.substAt depth replacement (idempotenceRhs u) =
       idempotenceRhs (Term.substAt depth replacement u) := by
@@ -343,7 +343,7 @@ def Reduces (Δ : DefEnv) (term result : Term) : Prop :=
 
 /--
 The judgment `Δ ⊢ Idempotent u` means
-`λx. u (u x) ↦* λx. u x` at some finite certification stage.
+`λx.(u (u x)) ↦* λx.(u x)` at some finite certification stage.
 -/
 def Idempotent (Δ : DefEnv) (u : Term) : Prop :=
   Reduces Δ (idempotenceLhs u) (idempotenceRhs u)
@@ -433,7 +433,7 @@ theorem starApp_idempotent (Δ : DefEnv) (u : Term) :
   Idempotent Δ (.app .star u) := by
   exact ⟨0, Steps.single (.lam .starredIdempotence)⟩
 
-/-- The first derived law from the paper: `* (* u) ↦ * u`. -/
+/-- The first derived law from the paper: `(* (* u)) ↦ (* u)`. -/
 theorem star_starApp (Δ : DefEnv) (u : Term) :
     ReducesOne Δ (.app .star (.app .star u)) (.app .star u) :=
   starChecking (starApp_idempotent Δ u)
@@ -446,7 +446,7 @@ theorem star_idempotent (Δ : DefEnv) : Idempotent Δ .star := by
     Steps.single (.lam .starredIdempotence)
   exact ⟨1, Steps.single (.lam (.starChecking certificate))⟩
 
-/-- The second derived law from the paper: `* * ↦ *`. -/
+/-- The second derived law from the paper: `(* *) ↦ *`. -/
 theorem star_star (Δ : DefEnv) : ReducesOne Δ (.app .star .star) .star :=
   starChecking (star_idempotent Δ)
 

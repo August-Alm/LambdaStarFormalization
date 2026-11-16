@@ -16,24 +16,24 @@ def falseName : Const := "false"
 def predicateTypeNamed : NamedTerm :=
   arrow "predicate" "value" (.const boolName) .star
 
-/-- `ΠP : Bool → *. P true → P false → P b`. -/
+/-- `ΠP : Bool → *.(P true) → (P false) → (P b)`. -/
 def boolFamilyNamed : NamedTerm :=
   pi "eliminate" "P" predicateTypeNamed <|
     arrow "onTrue" "trueProof" (.app (.var "P") (.const trueName)) <|
       arrow "onFalse" "falseProof" (.app (.var "P") (.const falseName))
         (.app (.var "P") (.var "b"))
 
-/-- The self-indexed projector `λb. (ΠP : Bool → *. P true → P false → P b) b`. -/
+/-- The self-indexed projector `λb.((ΠP : Bool → *.(P true) → (P false) → (P b)) b)`. -/
 def boolBodyNamed : NamedTerm :=
   self "b" boolFamilyNamed
 
-/-- `λP : Bool → *. λt : P true. λf : P false. t`. -/
+/-- `λP : Bool → *.λt : (P true).λf : (P false).t`. -/
 def trueBodyNamed : NamedTerm :=
   typedLam "P" predicateTypeNamed <|
     typedLam "t" (.app (.var "P") (.const trueName)) <|
       typedLam "f" (.app (.var "P") (.const falseName)) (.var "t")
 
-/-- `λP : Bool → *. λt : P true. λf : P false. f`. -/
+/-- `λP : Bool → *.λt : (P true).λf : (P false).f`. -/
 def falseBodyNamed : NamedTerm :=
   typedLam "P" predicateTypeNamed <|
     typedLam "t" (.app (.var "P") (.const trueName)) <|

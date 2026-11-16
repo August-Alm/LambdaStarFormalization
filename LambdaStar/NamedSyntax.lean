@@ -38,21 +38,21 @@ def compile (context : List String) : NamedTerm → Term
   | app function argument => .app (compile context function) (compile context argument)
   | star => .star
 
-/-- Package a self-indexed family as the ordinary lambda `λx. family x`. -/
+/-- Package a self-indexed family as the ordinary lambda `λx.(family x)`. -/
 def self (binder : String) (family : NamedTerm) : NamedTerm :=
   lam binder (.app family (.var binder))
 
-/-- `λx : A. t = λx. t{x := A x}`. -/
+/-- `λx : A.t = λx.t{x := (A x)}`. -/
 def typedLam (binder : String) (type body : NamedTerm) : NamedTerm :=
   lam binder (subst binder (.app type (.var binder)) body)
 
-/-- `[A → B] = λf. λx. B (f (A x))`. -/
+/-- `[A → B] = λf.λx.(B (f (A x)))`. -/
 def arrow (functionBinder argumentBinder : String) (domain codomain : NamedTerm) :
     NamedTerm :=
   lam functionBinder (lam argumentBinder
     (.app codomain (.app (.var functionBinder) (.app domain (.var argumentBinder)))))
 
-/-- `[Πx : A. B] = λf. λx. B{x := A x} (f (A x))`. -/
+/-- `[Πx : A.B] = λf.λx.(B{x := (A x)} (f (A x)))`. -/
 def pi (functionBinder argumentBinder : String) (domain codomain : NamedTerm) :
     NamedTerm :=
   let checkedArgument := .app domain (.var argumentBinder)

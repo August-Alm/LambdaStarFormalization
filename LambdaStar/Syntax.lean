@@ -26,11 +26,11 @@ def shift (amount cutoff : Nat) : Term → Term
       app (shift amount cutoff function) (shift amount cutoff argument)
   | star => star
 
-/-- Package a self-indexed family as the ordinary lambda `λx. family x`. -/
+/-- Package a self-indexed family as the ordinary lambda `λx.(family x)`. -/
 def self (family : Term) : Term :=
   .lam (.app family (.bvar 0))
 
-/-- `[A → B] = λf. λx. B (f (A x))`. -/
+/-- `[A → B] = λf.λx.(B (f (A x)))`. -/
 def arrow (domain codomain : Term) : Term :=
   .lam (.lam (.app (codomain.shift 2 0)
     (.app (.bvar 1) (.app (domain.shift 2 0) (.bvar 0)))))
@@ -50,7 +50,7 @@ def arrow (domain codomain : Term) : Term :=
 `substAt depth replacement body` implements capture-avoiding substitution
 and removes the binder at `depth`:
 
-    (λ. body) replacement  ↦β  substAt 0 replacement body.
+    (λ.body replacement)  ↦β  substAt 0 replacement body.
 -/
 def substAt (depth : Nat) (replacement : Term) : Term → Term
   | bvar index =>

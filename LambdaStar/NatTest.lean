@@ -15,30 +15,30 @@ def succName : Const := "succ"
 def predicateTypeNamed : NamedTerm :=
   arrow "predicate" "value" (.const natName) .star
 
-/-- `[Πk : Nat. P k → P (succ k)]`. -/
+/-- `[Πk : Nat.(P k) → (P (succ k))]`. -/
 def stepTypeNamed : NamedTerm :=
   pi "step" "k" (.const natName) <|
     arrow "induction" "proof" (.app (.var "P") (.var "k"))
       (.app (.var "P") (.app (.const succName) (.var "k")))
 
-/-- `ΠP : Nat → *. (Πk : Nat. P k → P (succ k)) → P zero → P n`. -/
+/-- `ΠP : Nat → *.(Πk : Nat.(P k) → (P (succ k))) → (P zero) → (P n)`. -/
 def natFamilyNamed : NamedTerm :=
   pi "eliminate" "P" predicateTypeNamed <|
     arrow "onSucc" "step" stepTypeNamed <|
       arrow "onZero" "base" (.app (.var "P") (.const zeroName))
         (.app (.var "P") (.var "n"))
 
-/-- The self-indexed projector `λn. family(n) n`. -/
+/-- The self-indexed projector `λn.(family n)`. -/
 def natBodyNamed : NamedTerm :=
   self "n" natFamilyNamed
 
-/-- `λP : Nat → *. λs : step(P). λz : P zero. z`. -/
+/-- `λP : Nat → *.λs : (step P).λz : (P zero).z`. -/
 def zeroBodyNamed : NamedTerm :=
   typedLam "P" predicateTypeNamed <|
     typedLam "s" stepTypeNamed <|
       typedLam "z" (.app (.var "P") (.const zeroName)) (.var "z")
 
-/-- `λn : Nat. λP : Nat → *. λs : step(P). λz : P zero. s n (n P s z)`. -/
+/-- `λn : Nat.λP : Nat → *.λs : (step P).λz : (P zero).(s n (n P s z))`. -/
 def succBodyNamed : NamedTerm :=
   typedLam "n" (.const natName) <|
     typedLam "P" predicateTypeNamed <|

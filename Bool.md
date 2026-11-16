@@ -5,19 +5,19 @@ Bool and its constructors form one recursive declaration block:
 ```text
 rec {
   Bool : * =
-    λb. (ΠP : Bool → *.
-      P true → P false → P b) b
+    λb.((ΠP : Bool → *.
+      (P true) → (P false) → (P b)) b)
 
   true : Bool =
     λP : Bool → *.
-    λt : P true.
-    λf : P false.
+    λt : (P true).
+    λf : (P false).
     t
 
   false : Bool =
     λP : Bool → *.
-    λt : P true.
-    λf : P false.
+    λt : (P true).
+    λf : (P false).
     f
 }
 ```

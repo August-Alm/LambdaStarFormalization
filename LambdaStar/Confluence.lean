@@ -21,11 +21,11 @@ def StagedConfluent (Δ : DefEnv) : Prop :=
 def IdempotentAt (Δ : DefEnv) (stage : Nat) (u : Term) : Prop :=
   Steps Δ stage (idempotenceLhs u) (idempotenceRhs u)
 
-/-- The pointwise instance `u (u t) ↦ₙ* u t` of idempotence. -/
+/-- The pointwise instance `(u (u t)) ↦ₙ* (u t)` of idempotence. -/
 def IdempotentOn (Δ : DefEnv) (stage : Nat) (u term : Term) : Prop :=
   Steps Δ stage (.app u (.app u term)) (.app u term)
 
-/-- Instantiating `λx. u (u x) ↦ₙ* λx. u x` yields `u (u t) ↦ₙ* u t`. -/
+/-- Instantiating `λx.(u (u x)) ↦ₙ* λx.(u x)` yields `(u (u t)) ↦ₙ* (u t)`. -/
 theorem IdempotentAt.on (certificate : IdempotentAt Δ stage u) (term : Term) :
   IdempotentOn Δ stage u term := by
   have bodyReduction := Steps.invert_lam certificate

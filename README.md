@@ -21,14 +21,14 @@ identification. Dana Scott’s proof proceeds as follows. Consider the category
 which has as objects the untyped lambda terms A that (in the interpretation)
 are idempotent, A = λx.(A (A x)). Let a morphism A → B be an untyped
 term f for which (in the interpretation) f = λx.(B (f (A x))). The identity
-morphisms are just idA = A and compositions are by f ◦ g = λx.( f (g x)).
+morphisms are just idA = A and compositions are by f ◦ g = λx.(f (g x)).
 The formulas
 ```text
-A × B = λu.λz.((z (A (u λx.λ y.x))) (B (u λx.λ y.y)))
+A × B = λu.λz.(z (A (u λx.λy.x)) (B (u λx.λy.y)))
 ```
 and
 ```text
-A → B = λ f .λx.(B (f (A x)))
+A → B = λf.λx.(B (f (A x)))
 ```
 gives it a cartesian closed structure. From this category we now have an
 interpretation of the typed lambda calculus. A term t of type A is a term such
@@ -188,7 +188,7 @@ Here `x` ranges over bound variables and `c` ranges over **closure names**.
 A closure environment `Δ` associates a name `c` with at most one closed body
 `Δ(c)`. Recursive declaration blocks provide finite lists of signatures and
 bodies from which these environments are built. A bare name is a stable term:
-only an application `c u` exposes the body as `Δ(c) u`. This lets recursive
+only an application `(c u)` exposes the body as `(Δ(c) u)`. This lets recursive
 types and constructors refer to persistent names such as `Bool`, `true`, and
 `false` without replacing those names by their implementation bodies.
 
@@ -198,18 +198,18 @@ The closed computational fragment is indexed by a natural-number certification
 stage. At every stage `n`, its root contractions are:
 
 ```text
-(λx.t) u             ↦ₙ t{x := u}
-c u                  ↦ₙ b u                 if Δ(c) = b
-(* A) ((* A) t)      ↦ₙ (* A) t
+(λx.t u)             ↦ₙ t{x := u}
+(c u)                ↦ₙ (b u)               if Δ(c) = b
+(* A (* A t))        ↦ₙ (* A t)
 ```
 
 The remaining root contraction is **star checking**. It recognizes `A` as a
 type projector from an idempotence certificate at the preceding stage:
 
 ```text
-λx. A (A x) ↦*ₙ λx. A x
+λx.(A (A x)) ↦*ₙ λx.(A x)
 ----------------------- StarChecking
-  * A ↦ₙ₊₁ A
+  (* A) ↦ₙ₊₁ A
 ```
 
 Here `↦*ₙ` is the reflexive-transitive closure of `↦ₙ`, at one fixed stage.
@@ -225,7 +225,7 @@ t ↦ₙ t'
 
 t ↦ₙ t'                  u ↦ₙ u'
 ──────────────           ──────────────
-t u ↦ₙ t' u              t u ↦ₙ t u'
+(t u) ↦ₙ (t' u)          (t u) ↦ₙ (t u')
 ```
 
 These three congruence rules together with the four root contractions above are
@@ -235,12 +235,12 @@ each name has at most one body.
 Operationally, an idempotence certificate is a finite reduction
 
 ```text
-λx. A (A x) ↦* λx. A x
+λx.(A (A x)) ↦* λx.(A x)
 ```
 
 and `*` recognizes such certified projectors. Consequently `A : *` means
-`* A ≃ A`: `A` is itself fixed by the universe projector. Certification is
-stratified, so a `* A ↦ A` step may use only an idempotence derivation from an
+`(* A) ≃ A`: `A` is itself fixed by the universe projector. Certification is
+stratified, so a `(* A) ↦ A` step may use only an idempotence derivation from an
 earlier stage.
 
 Typing uses a second, contextual operational relation, `GuardedStep`. It embeds
@@ -253,7 +253,7 @@ closure consumes one observation:
 ```text
 Δprior(A) = S
 -------------------------------- Delta
-Δprior ; Δform ; Γ ⊢ₙ₊₁ A u ↦gₙ S u
+Δprior ; Δform ; Γ ⊢ₙ₊₁ (A u) ↦gₙ (S u)
 ```
 
 An explicit `later` step may discard one observation without changing the
@@ -267,10 +267,10 @@ A family `T` may depend on the value `x` being checked. Its associated
 self-indexed projector is the ordinary lambda term
 
 ```text
-S = λx. T x
+S = λx.(T x)
 ```
 
-Consequently `S t ↦ T{x := t} t` is just beta reduction; there is no separate
+Consequently `(S t) ↦ (T{x := t} t)` is just beta reduction; there is no separate
 self binder or self-instantiation rule in the core calculus. This shape is not
 in itself recursive or inductive. It merely packages a value-indexed family as
 a projector.
@@ -282,7 +282,7 @@ operational joinability at every finite recursive observation depth:
 ```text
 Checks Δprior Δform Γ t A
   implies
-∀n. Δprior ; Δform ; Γ ⊢ₙ A t ≃ t
+∀n. Δprior ; Δform ; Γ ⊢ₙ (A t) ≃ t
 ```
 
 `ContextEquiv` supplies symmetry, transitivity, congruence, and extensionality
@@ -309,7 +309,7 @@ Recursion is represented only by the environment equation `Δ(A) = S`; there
 is no `μ` term. Operationally, the equation is exposed at an application head:
 
 ```text
-A u ↦ Δ(A) u = S u
+(A u) ↦ (Δ(A) u) = (S u)
 ```
 
 Recursive type formation uses guarded step-indexed operational induction. At
@@ -318,11 +318,11 @@ available. At a successor depth, recursive idempotence is itself a reduction:
 
 ```text
 Δform(A) = S
-ΓA = (* A ≃ A) :: (Idempotent A) :: Γ
-Δprior ; Δform ; ΓA, x : A ⊢ₙ→ₘ S (A x) ↦g* S x
+ΓA = ((* A) ≃ A) :: (Idempotent A) :: Γ
+Δprior ; Δform ; ΓA, x : A ⊢ₙ→ₘ (S (A x)) ↦g* (S x)
 -------------------------------------------------- RecursiveIdempotence
 Δprior ; Δform ; Γ ⊢ₙ₊₁→ₘ₊₁
-  λy. A (A y) ↦g λy. A y
+  λy.(A (A y)) ↦g λy.(A y)
 ```
 
 Here `↦g*` is directed `GuardedSteps`, not logical equality. The equations
@@ -334,13 +334,13 @@ Guarded star checking preserves the source and remaining depths of its
 operational certificate:
 
 ```text
-Δprior ; Δform ; Γ ⊢ₙ→ₘ λy. A (A y) ↦g* λy. A y
+Δprior ; Δform ; Γ ⊢ₙ→ₘ λy.(A (A y)) ↦g* λy.(A y)
 ------------------------------------------------ StarChecking
-Δprior ; Δform ; Γ ⊢ₙ→ₘ * A ↦g A
+Δprior ; Δform ; Γ ⊢ₙ→ₘ (* A) ↦g A
 ```
 
 Recursive idempotence therefore exists first as a directed reduction and only
-then induces `* A ≃ A` through guarded joinability. The recursion depth remains
+then induces `(* A) ≃ A` through guarded joinability. The recursion depth remains
 independent of the certification stage carried by embedded closed `Step`
 derivations.
 
@@ -389,16 +389,16 @@ derivation in a `ValidatedEnv` induces `ContextEquiv` at every observation
 depth. This recovers unrestricted finite evaluation globally without a
 same-world recursive delta rule.
 
-The eta-recursive body `A = λx. A x` is guarded in this proof theory: at each
+The eta-recursive body `A = λx.(A x)` is guarded in this proof theory: at each
 successor world its recursive use is interpreted at the predecessor world. It
 may therefore denote an indefinitely delayed or bottom-like object. Guarded
 idempotence establishes safety, not productivity; rejecting such declarations
 would require an additional productivity or adequacy criterion.
 
-For a previously available self-indexed projector `A = λx. T x`, constructor
+For a previously available self-indexed projector `A = λx.(T x)`, constructor
 checking preserves stable closure names. A body for `c : A` is checked against
 `T{x := c}`, and a function returning `A` is checked pointwise under its domain
-assumption. Thus indices remain `P true`, `P zero`, and `P (succ n)` rather than
+assumption. Thus indices remain `(P true)`, `(P zero)`, and `(P (succ n))` rather than
 being replaced by constructor implementation bodies.
 
 Bool therefore uses:
@@ -406,13 +406,13 @@ Bool therefore uses:
 ```text
 rec {
   Bool  : * =
-    λb. (ΠP : Bool → *. P true → P false → P b) b
+    λb.((ΠP : Bool → *. (P true) → (P false) → (P b)) b)
 
   true  : Bool =
-    λP : Bool → *. λt : P true. λf : P false. t
+    λP : Bool → *. λt : (P true). λf : (P false). t
 
   false : Bool =
-    λP : Bool → *. λt : P true. λf : P false. f
+    λP : Bool → *. λt : (P true). λf : (P false). f
 }
 ```
 
@@ -425,21 +425,21 @@ its successor implementation:
 ```text
 rec {
   Nat  : * =
-    λn. (ΠP : Nat → *.
-      (Πk : Nat. P k → P (succ k)) → P zero → P n) n
+    λn.((ΠP : Nat → *.
+      (Πk : Nat. (P k) → (P (succ k))) → (P zero) → (P n)) n)
 
   zero : Nat =
     λP : Nat → *.
-    λs : (Πk : Nat. P k → P (succ k)).
-    λz : P zero.
+    λs : (Πk : Nat. (P k) → (P (succ k))).
+    λz : (P zero).
     z
 
   succ : Nat → Nat =
     λn : Nat.
     λP : Nat → *.
-    λs : (Πk : Nat. P k → P (succ k)).
-    λz : P zero.
-    s n (n P s z)
+    λs : (Πk : Nat. (P k) → (P (succ k))).
+    λz : (P zero).
+    (s n (n P s z))
 }
 ```
 
