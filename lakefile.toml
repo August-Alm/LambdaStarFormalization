@@ -5,6 +5,9 @@ defaultTargets = ["lambdastar"]
 [[lean_lib]]
 name = "LambdaStar"
 
+[[lean_lib]]
+name = "FixedPoint"
+
 [[lean_exe]]
 name = "lambdastar"
 root = "Main"
